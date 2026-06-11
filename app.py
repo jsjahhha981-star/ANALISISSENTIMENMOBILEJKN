@@ -1454,14 +1454,13 @@ elif page == "Preprocessing":
     import re
     import nltk
 
-    from nltk.tokenize import word_tokenize
     from nltk.corpus import stopwords
     from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
-
-    nltk.download("punkt")
-    nltk.download("stopwords")
-
+    try:
+        nltk.data.find('corpora/stopwords')
+    except:
+        nltk.download('stopwords')
 
     st.markdown("""
     <div style="
@@ -1476,15 +1475,12 @@ elif page == "Preprocessing":
     </div>
     """, unsafe_allow_html=True)
 
-
     uploaded_file = st.file_uploader(
         "Upload Dataset CSV",
         type=["csv"]
     )
 
-
     if uploaded_file is not None:
-
 
         # =========================
         # LOAD DATA
@@ -1497,13 +1493,11 @@ elif page == "Preprocessing":
             on_bad_lines="skip"
         )
 
-
         review.columns = (
             review.columns
             .str.strip()
             .str.replace(";", "", regex=False)
         )
-
 
         st.subheader("📄 Dataset Awal")
 
@@ -1512,21 +1506,17 @@ elif page == "Preprocessing":
             use_container_width=True
         )
 
-
         if "content" not in review.columns:
 
             st.error(
-                "Kolom content tidak ditemukan"
+                "Kolom 'content' tidak ditemukan"
             )
 
-
         else:
-
 
             with st.spinner(
                 "Melakukan preprocessing..."
             ):
-
 
                 # =========================
                 # HAPUS DATA KOSONG
@@ -1536,14 +1526,11 @@ elif page == "Preprocessing":
                     subset=["content"]
                 )
 
-
                 review = review[
                     review["content"]
                     .astype(str)
                     .str.strip() != ""
                 ]
-
-
 
                 # =========================
                 # CASE FOLDING
@@ -1551,18 +1538,15 @@ elif page == "Preprocessing":
 
                 def casefoldingText(text):
 
-                    if isinstance(text,str):
+                    if isinstance(text, str):
                         return text.lower()
 
                     return ""
-
 
                 review["CaseFolding"] = (
                     review["content"]
                     .apply(casefoldingText)
                 )
-
-
 
                 # =========================
                 # CLEANING
@@ -1600,17 +1584,13 @@ elif page == "Preprocessing":
                         text
                     )
 
-
                     text = re.sub(
                         r'\s+',
                         ' ',
                         text
                     )
 
-
                     return text.strip()
-
-
 
                 def clearEmoji(text):
 
@@ -1622,8 +1602,6 @@ elif page == "Preprocessing":
                         )
                         .decode("ascii")
                     )
-
-
 
                 def replaceTOM(text):
 
@@ -1637,8 +1615,6 @@ elif page == "Preprocessing":
                         text
                     )
 
-
-
                 review["Cleaning"] = (
                     review["CaseFolding"]
                     .apply(cleaningulasan)
@@ -1646,14 +1622,10 @@ elif page == "Preprocessing":
                     .apply(replaceTOM)
                 )
 
-
-
                 review = review[
                     review["Cleaning"]
                     .str.strip() != ""
                 ]
-
-
 
                 # =========================
                 # TOKENIZING
@@ -1661,17 +1633,12 @@ elif page == "Preprocessing":
 
                 def tokenizingText(text):
 
-                    return word_tokenize(
-                        str(text)
-                    )
-
+                    return str(text).split()
 
                 review["Tokenizing"] = (
                     review["Cleaning"]
                     .apply(tokenizingText)
                 )
-
-
 
                 # =========================
                 # FORMALISASI
@@ -1699,9 +1666,8 @@ elif page == "Preprocessing":
                     "blm":"belum",
                     "apk":"aplikasi",
                     "app":"aplikasi"
+
                 }
-
-
 
                 def formal_text(words):
 
@@ -1713,14 +1679,10 @@ elif page == "Preprocessing":
                         for word in words
                     ]
 
-
-
                 review["Formalisasi"] = (
                     review["Tokenizing"]
                     .apply(formal_text)
                 )
-
-
 
                 # =========================
                 # STOPWORD
@@ -1732,19 +1694,14 @@ elif page == "Preprocessing":
                     )
                 )
 
-
-                stopword.update(
-                    [
-                        "yg",
-                        "dg",
-                        "rt",
-                        "aja",
-                        "nih",
-                        "sih"
-                    ]
-                )
-
-
+                stopword.update([
+                    "yg",
+                    "dg",
+                    "rt",
+                    "aja",
+                    "nih",
+                    "sih"
+                ])
 
                 def stopwordText(words):
 
@@ -1754,14 +1711,10 @@ elif page == "Preprocessing":
                         if word not in stopword
                     ]
 
-
-
                 review["WithoutStopwords"] = (
                     review["Formalisasi"]
                     .apply(stopwordText)
                 )
-
-
 
                 # =========================
                 # STEMMING
@@ -1770,10 +1723,8 @@ elif page == "Preprocessing":
                 factory = StemmerFactory()
 
                 stemmer = (
-                    factory
-                    .create_stemmer()
+                    factory.create_stemmer()
                 )
-
 
                 def stemmingText(words):
 
@@ -1781,38 +1732,30 @@ elif page == "Preprocessing":
 
                     return stemmer.stem(text)
 
-
-
                 review["Stemming"] = (
                     review["WithoutStopwords"]
                     .apply(stemmingText)
                 )
-
-
 
                 # =========================
                 # LABELING
                 # =========================
 
                 positif = [
-
                     "bagus",
                     "baik",
                     "cepat",
                     "mudah",
                     "mantap",
-                    "membantu",
+                    "bantu",
                     "puas",
                     "praktis",
                     "lancar",
                     "aman",
                     "nyaman"
-
                 ]
 
-
                 negatif = [
-
                     "buruk",
                     "error",
                     "gagal",
@@ -1824,126 +1767,86 @@ elif page == "Preprocessing":
                     "masalah",
                     "kendala",
                     "rusak"
-
                 ]
-
-
 
                 def labeling(text):
 
                     text = str(text)
 
-
                     skor = 0
-
 
                     for kata in positif:
 
                         if kata in text:
                             skor += 1
 
-
                     for kata in negatif:
 
                         if kata in text:
                             skor -= 1
 
-
-
                     if skor > 0:
-
                         return "Positif"
 
-
                     elif skor < 0:
-
                         return "Negatif"
 
-
                     else:
-
                         return "Netral"
 
-
-
                 review["Label"] = (
-                    review["Cleaning"]
+                    review["Stemming"]
                     .apply(labeling)
                 )
-
-
 
             st.success(
                 "✅ Preprocessing selesai"
             )
 
-
             st.subheader(
                 "📊 Hasil Preprocessing"
             )
 
-
             st.dataframe(
                 review[
                     [
-                    "content",
-                    "CaseFolding",
-                    "Cleaning",
-                    "Tokenizing",
-                    "Formalisasi",
-                    "WithoutStopwords",
-                    "Stemming",
-                    "Label"
+                        "content",
+                        "CaseFolding",
+                        "Cleaning",
+                        "Tokenizing",
+                        "Formalisasi",
+                        "WithoutStopwords",
+                        "Stemming",
+                        "Label"
                     ]
                 ],
                 use_container_width=True
             )
 
-
             st.subheader(
                 "📈 Distribusi Sentimen"
             )
-
 
             st.bar_chart(
                 review["Label"]
                 .value_counts()
             )
 
-
             # =========================
-            # DOWNLOAD
+            # DOWNLOAD CSV
             # =========================
 
-            output_file = (
-                "hasil_preprocessing_mobile_jkn.csv"
-            )
-
-
-            review.to_csv(
-                output_file,
+            csv = review.to_csv(
                 index=False
+            ).encode("utf-8")
+
+            st.download_button(
+                label="📥 Download Hasil Preprocessing",
+                data=csv,
+                file_name="hasil_preprocessing_mobile_jkn.csv",
+                mime="text/csv",
+                use_container_width=True
             )
-
-
-            with open(
-                output_file,
-                "rb"
-            ) as file:
-
-
-                st.download_button(
-
-                    label="📥 Download Hasil Preprocessing",
-
-                    data=file,
-
-                    file_name=output_file,
-
-                    mime="text/csv",
-
-                    use_container_width=True
-                )
     
 
 
