@@ -12,6 +12,8 @@ from sklearn.metrics import (
 )
 
 from sklearn.model_selection import train_test_split
+if "page" not in st.session_state:
+    st.session_state.page = "home"
 
 # =====================================================
 # CONFIG PAGE
@@ -456,33 +458,37 @@ if not st.session_state.login_status:
 
     st.stop()
 
-# =====================================================
+# =====================================
 # SIDEBAR
-# =====================================================
+# =====================================
+with st.sidebar:
 
-st.sidebar.markdown("""
-<div class="sidebar-title">
-MENU PAGE
-</div>
-""", unsafe_allow_html=True)
-
-menu = st.sidebar.radio(
-    "PILIH MENU",
-    [
-        "Home",
-        "Prediksi Sentimen",
-        "Upload Dataset",
-        "Riwayat"
-    ]
-)
-
-# =====================================================
-# USER INFO
-# =====================================================
-
-st.sidebar.success(
+    st.markdown(
+        '<div class="sidebar-title">HALAMAN MENU</div>',
+        unsafe_allow_html=True
+    )
+    # =====================================================
+    # # USER INFO
+    # # =====================================================
+    st.sidebar.success(
     f"Login sebagai: {st.session_state.username}"
-)
+    )
+
+    if st.button("Home", use_container_width=True):
+        st.session_state.page = "Home"
+
+    if st.button("Prediksi", use_container_width=True):
+        st.session_state.page = "Prediksi"
+
+    if st.button("Riwayat", use_container_width=True):
+        st.session_state.page = "Riwayat"
+
+    st.divider()
+
+    if st.button("Preprocessing", use_container_width=True):
+        st.session_state.page = "Preprocessing"
+
+    st.divider()
 
 if st.sidebar.button("Logout"):
 
@@ -495,8 +501,9 @@ if st.sidebar.button("Logout"):
 # =====================================================
 # MENU HOME
 # =====================================================
+page = st.session_state.page
 
-if menu == "Home":
+if page == "Home":
 
     st.container()
     st.markdown("""
@@ -643,7 +650,7 @@ if menu == "Home":
 # MENU PREDIKSI
 # =====================================================
 
-elif menu == "Prediksi Sentimen":
+elif page == "Prediksi":
 
     # =====================================================
     # CSS FORM
@@ -707,23 +714,27 @@ elif menu == "Prediksi Sentimen":
         placeholder="Tulis ulasan aplikasi Mobile JKN disini...",
         height=180
     )
+    # =====================================
+    # BUTTON
+    # =====================================
 
-    col_btn1, col_btn2, col_btn3 = st.columns([1,1,7])
+    tombol1, tombol2 = st.columns(2)
 
-    with col_btn1:
-        submit = st.button("Prediksi")
+    with tombol1:
+        submit = st.button(
+            "Prediksi",
+            use_container_width=True
+        )
 
-    with col_btn2:
-        clear = st.button("Reset")
+    with tombol2:
+        upload_btn = st.button(
+            "Upload Dataset",
+            use_container_width=True
+        )
 
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # =====================================================
-    # RESET
-    # =====================================================
-
-    if clear:
-        st.rerun()
+        if upload_btn:
+            st.session_state.page = "Upload Dataset"
+            st.rerun()
 
 # =====================================================
 # HASIL PREDIKSI
@@ -758,11 +769,6 @@ if submit:
             ">
             """, unsafe_allow_html=True)
 
-            st.markdown(
-                "<h2 style='color:#c96c6c;text-align:center;'>HASIL PREDIKSI SENTIMEN</h2>",
-                unsafe_allow_html=True
-            )
-
             col1, col2 = st.columns([1,2])
 
             with col1:
@@ -792,258 +798,313 @@ if submit:
 # MENU UPLOAD DATASET
 # =====================================================
 
-elif menu == "Upload Dataset":
+elif page == "Upload Dataset":
+
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    from sklearn.model_selection import train_test_split
+    from sklearn.metrics import (
+        accuracy_score,
+        classification_report,
+        confusion_matrix,
+        ConfusionMatrixDisplay
+    )
 
     st.markdown("""
     <style>
 
     .form-container{
-        background: white;
-        padding: 35px;
-        border-radius: 20px;
-        box-shadow: 0px 4px 20px rgba(0,0,0,0.08);
-        margin-top: 20px;
+        background:white;
+        padding:35px;
+        border-radius:20px;
+        box-shadow:0px 4px 20px rgba(0,0,0,0.08);
+        margin-top:20px;
     }
 
     .form-title{
-        font-size: 32px;
-        font-weight: bold;
-        color: #c96c6c;
-        margin-bottom: 25px;
-        text-align: center;
-    }
-
-    .result-container{
-        background: white;
-        padding: 30px;
-        border-radius: 20px;
-        margin-top: 30px;
-        box-shadow: 0px 4px 20px rgba(0,0,0,0.08);
-    }
-
-    .result-title{
-        font-size: 28px;
-        font-weight: bold;
-        color: #c96c6c;
-        margin-bottom: 20px;
+        font-size:32px;
+        font-weight:bold;
+        color:#c96c6c;
+        text-align:center;
+        margin-bottom:20px;
     }
 
     </style>
     """, unsafe_allow_html=True)
 
-    # =====================================================
-    # FORM INPUT
-    # =====================================================
-
     st.markdown("""
     <div class="form-container">
         <div class="form-title">
-            UPLOAD DATASET CSV
+            UPLOAD DATASET HASIL PREPROCESSING
         </div>
+    </div>
     """, unsafe_allow_html=True)
 
     uploaded_file = st.file_uploader(
-        "Upload File CSV",
+        "Upload File CSV Hasil Preprocessing",
         type=["csv"]
     )
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
     if uploaded_file is not None:
 
         try:
 
+            # ==========================
+            # LOAD DATA
+            # ==========================
+
             data = pd.read_csv(
                 uploaded_file,
-                sep=';',
-                encoding='utf-8',
-                engine='python'
+                sep=",",
+                encoding="utf-8",
+                engine="python",
+                on_bad_lines="skip"
             )
 
-            st.success("✅ Dataset berhasil diupload!")
+            st.success(
+                "✅ Dataset berhasil diupload"
+            )
 
-            # =====================================================
-            # PREVIEW DATASET
-            # =====================================================
+            # ==========================
+            # CEK KOLOM
+            # ==========================
 
-            st.subheader("PREVIEW DATASET")
-            st.dataframe(data.head())
+            if "Stemming" not in data.columns:
 
-            # =====================================================
-            # PILIH KOLOM
-            # =====================================================
-
-            col1, col2 = st.columns(2)
-
-            with col1:
-                kolom_text = st.selectbox(
-                    "PILIH KOLOM TEXT",
-                    data.columns
+                st.error(
+                    "Kolom 'Stemming' tidak ditemukan."
                 )
 
-            with col2:
-                kolom_label = st.selectbox(
-                    "PILIH KOLOM LABEL",
-                    data.columns
+                st.stop()
+
+            if "Label" not in data.columns:
+
+                st.error(
+                    "Kolom 'Label' tidak ditemukan."
                 )
 
-            # =====================================================
-            # BUTTON PROSES
-            # =====================================================
+                st.stop()
+
+            # ==========================
+            # HAPUS DATA KOSONG
+            # ==========================
+
+            data = data.dropna(
+                subset=["Stemming", "Label"]
+            )
+
+            data = data[
+                (data["Stemming"].astype(str).str.strip() != "")
+                &
+                (data["Label"].astype(str).str.strip() != "")
+            ]
+
+            # ==========================
+            # PREVIEW DATA
+            # ==========================
+
+            st.subheader("📄 Preview Dataset")
+
+            st.dataframe(
+                data.head(),
+                use_container_width=True
+            )
+
+            # ==========================
+            # TOMBOL PROSES
+            # ==========================
 
             if st.button("🚀 Proses Analisis Sentimen"):
 
-                # =====================================================
-                # SPLIT DATA
-                # =====================================================
+                with st.spinner(
+                    "Melakukan analisis..."
+                ):
 
-                X = data[kolom_text].astype(str)
-                y = data[kolom_label].astype(str)
+                    # ==========================
+                    # FITUR & LABEL
+                    # ==========================
 
-                X_train, X_test, y_train, y_test = train_test_split(
-                    X,
-                    y,
-                    test_size=0.2,
-                    random_state=42,
-                    stratify=y
-                )
+                    X = data["Stemming"].astype(str)
 
-                # =====================================================
-                # PREDIKSI
-                # =====================================================
+                    y = data["Label"].astype(str)
 
-                prediksi = model.predict(X_test)
+                    # ==========================
+                    # SPLIT DATA
+                    # ==========================
 
-                hasil_df = pd.DataFrame({
+                    X_train, X_test, y_train, y_test = train_test_split(
+                        X,
+                        y,
+                        test_size=0.2,
+                        random_state=42,
+                        stratify=y
+                    )
+
+                    # =====================================================
+                    # # PREDIKSI
+                    # # =====================================================
+                    prediksi = model.predict(X_test)
+                    hasil_df = pd.DataFrame({
                     'Text': X_test.values,
                     'Label Asli': y_test.values,
                     'Prediksi': prediksi
                 })
 
-                st.success("✅ Analisis Sentimen Berhasil!")
-
-                # =====================================================
-                # HASIL ANALISIS
-                # =====================================================
-
-                st.subheader("HASIL ANALISIS")
-                st.dataframe(hasil_df.head(20))
-
-                # =====================================================
-                # AKURASI
-                # =====================================================
-
-                accuracy = accuracy_score(
-                    y_test,
-                    prediksi
-                )
-
-                st.subheader("AKURASI MODEL")
-
-                st.metric(
-                    "Accuracy",
-                    f"{accuracy:.2%}"
-                )
-
-                # =====================================================
-                # CLASSIFICATION REPORT
-                # =====================================================
-
-                st.subheader("CLASSIFICATION REPORT")
-
-                report = classification_report(
-                    y_test,
-                    prediksi,
-                    output_dict=True
-                )
-
-                report_df = pd.DataFrame(report).transpose()
-
-                st.dataframe(report_df)
-
-                # =====================================================
-                # GRAFIK & CONFUSION MATRIX SEJAJAR
-                # =====================================================
-
-                col_chart1, col_chart2 = st.columns(2)
-
-                # =====================================================
-                # GRAFIK DISTRIBUSI SENTIMEN
-                # =====================================================
-
-                with col_chart1:
-
-                    st.subheader("GRAFIK DISTRIBUSI SENTIMEN")
-
-                    sentimen_count = pd.Series(
-                        prediksi
-                    ).value_counts()
-
-                    fig1, ax1 = plt.subplots(
-                        figsize=(6,5)
+                    st.success(
+                        "✅ Analisis berhasil dilakukan"
                     )
 
-                    ax1.bar(
-                        sentimen_count.index,
-                        sentimen_count.values
+                    st.subheader(
+                        "📊 Hasil Prediksi"
                     )
 
-                    ax1.set_xlabel("Sentimen")
-                    ax1.set_ylabel("Jumlah")
-                    ax1.set_title("Distribusi Sentimen")
+                    st.dataframe(
+                        hasil_df,
+                        use_container_width=True
+                    )
 
-                    st.pyplot(fig1)
+                    # ==========================
+                    # AKURASI
+                    # ==========================
 
-                # =====================================================
-                # CONFUSION MATRIX
-                # =====================================================
-
-                with col_chart2:
-
-                    st.subheader("CONFUSION MATRIX")
-
-                    cm = confusion_matrix(
+                    accuracy = accuracy_score(
                         y_test,
                         prediksi
                     )
 
-                    fig2, ax2 = plt.subplots(
-                        figsize=(6,5)
+                    st.subheader(
+                        "🎯 Akurasi Model"
                     )
 
-                    disp = ConfusionMatrixDisplay(
-                        confusion_matrix=cm
+                    st.metric(
+                        "Accuracy",
+                        f"{accuracy:.2%}"
                     )
 
-                    disp.plot(ax=ax2)
+                    # ==========================
+                    # CLASSIFICATION REPORT
+                    # ==========================
 
-                    st.pyplot(fig2)
+                    st.subheader(
+                        "📋 Classification Report"
+                    )
 
-                # =====================================================
-                # DOWNLOAD CSV
-                # =====================================================
+                    report = classification_report(
+                        y_test,
+                        prediksi,
+                        output_dict=True
+                    )
 
-                csv = hasil_df.to_csv(
-                    index=False
-                ).encode('utf-8')
+                    report_df = (
+                        pd.DataFrame(report)
+                        .transpose()
+                    )
 
-                st.download_button(
-                    label="⬇️ Download Hasil",
-                    data=csv,
-                    file_name='hasil_sentimen.csv',
-                    mime='text/csv'
-                )
+                    st.dataframe(
+                        report_df,
+                        use_container_width=True
+                    )
+
+                    # ==========================
+                    # GRAFIK
+                    # ==========================
+
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+
+                        st.subheader(
+                            "📈 Distribusi Prediksi"
+                        )
+
+                        sentimen_count = (
+                            pd.Series(prediksi)
+                            .value_counts()
+                        )
+
+                        fig1, ax1 = plt.subplots(
+                            figsize=(6,5)
+                        )
+
+                        ax1.bar(
+                            sentimen_count.index,
+                            sentimen_count.values
+                        )
+
+                        ax1.set_xlabel(
+                            "Sentimen"
+                        )
+
+                        ax1.set_ylabel(
+                            "Jumlah"
+                        )
+
+                        ax1.set_title(
+                            "Distribusi Sentimen"
+                        )
+
+                        st.pyplot(fig1)
+
+                    with col2:
+
+                        st.subheader(
+                            "📊 Confusion Matrix"
+                        )
+
+                        cm = confusion_matrix(
+                            y_test,
+                            prediksi
+                        )
+
+                        fig2, ax2 = plt.subplots(
+                            figsize=(6,5)
+                        )
+
+                        disp = (
+                            ConfusionMatrixDisplay(
+                                confusion_matrix=cm
+                            )
+                        )
+
+                        disp.plot(ax=ax2)
+
+                        st.pyplot(fig2)
+
+                    # ==========================
+                    # DOWNLOAD
+                    # ==========================
+
+                    csv = hasil_df.to_csv(
+                        index=False
+                    ).encode("utf-8")
+
+                    st.download_button(
+
+                        label="📥 Download Hasil Prediksi",
+
+                        data=csv,
+
+                        file_name=
+                        "hasil_prediksi_sentimen.csv",
+
+                        mime="text/csv",
+
+                        use_container_width=True
+                    )
 
         except Exception as e:
 
-            st.error(f"❌ Error: {e}")
+            st.error(
+                f"❌ Error : {e}"
+            )
 
 
 # =====================================================
 # MENU RIWAYAT
 # =====================================================
 
-elif menu == "Riwayat":
+elif page == "Riwayat":
 
     import pandas as pd
 
@@ -1387,7 +1448,502 @@ elif menu == "Riwayat":
                 )
 
                 st.rerun()
+elif page == "Preprocessing":
 
+    import pandas as pd
+    import re
+    import nltk
+
+    from nltk.tokenize import word_tokenize
+    from nltk.corpus import stopwords
+    from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+
+
+    nltk.download("punkt")
+    nltk.download("stopwords")
+
+
+    st.markdown("""
+    <div style="
+        background:#b08968;
+        padding:30px;
+        border-radius:20px;
+        text-align:center;
+    ">
+    <h1 style="color:white">
+    PREPROCESSING DAN PELABELAN DATA
+    </h1>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+    uploaded_file = st.file_uploader(
+        "Upload Dataset CSV",
+        type=["csv"]
+    )
+
+
+    if uploaded_file is not None:
+
+
+        # =========================
+        # LOAD DATA
+        # =========================
+
+        review = pd.read_csv(
+            uploaded_file,
+            sep=",",
+            engine="python",
+            on_bad_lines="skip"
+        )
+
+
+        review.columns = (
+            review.columns
+            .str.strip()
+            .str.replace(";", "", regex=False)
+        )
+
+
+        st.subheader("📄 Dataset Awal")
+
+        st.dataframe(
+            review.head(),
+            use_container_width=True
+        )
+
+
+        if "content" not in review.columns:
+
+            st.error(
+                "Kolom content tidak ditemukan"
+            )
+
+
+        else:
+
+
+            with st.spinner(
+                "Melakukan preprocessing..."
+            ):
+
+
+                # =========================
+                # HAPUS DATA KOSONG
+                # =========================
+
+                review = review.dropna(
+                    subset=["content"]
+                )
+
+
+                review = review[
+                    review["content"]
+                    .astype(str)
+                    .str.strip() != ""
+                ]
+
+
+
+                # =========================
+                # CASE FOLDING
+                # =========================
+
+                def casefoldingText(text):
+
+                    if isinstance(text,str):
+                        return text.lower()
+
+                    return ""
+
+
+                review["CaseFolding"] = (
+                    review["content"]
+                    .apply(casefoldingText)
+                )
+
+
+
+                # =========================
+                # CLEANING
+                # =========================
+
+                def cleaningulasan(text):
+
+                    text = re.sub(
+                        r'@[A-Za-z0-9_]+',
+                        ' ',
+                        str(text)
+                    )
+
+                    text = re.sub(
+                        r'#[A-Za-z0-9_]+',
+                        ' ',
+                        text
+                    )
+
+                    text = re.sub(
+                        r'http\S+',
+                        ' ',
+                        text
+                    )
+
+                    text = re.sub(
+                        r'[0-9]+',
+                        ' ',
+                        text
+                    )
+
+                    text = re.sub(
+                        r'[-()"#/@;:<>{}+=~|.!?,_]',
+                        ' ',
+                        text
+                    )
+
+
+                    text = re.sub(
+                        r'\s+',
+                        ' ',
+                        text
+                    )
+
+
+                    return text.strip()
+
+
+
+                def clearEmoji(text):
+
+                    return (
+                        text
+                        .encode(
+                            "ascii",
+                            "ignore"
+                        )
+                        .decode("ascii")
+                    )
+
+
+
+                def replaceTOM(text):
+
+                    pola = re.compile(
+                        r'(.)\1{2,}',
+                        re.DOTALL
+                    )
+
+                    return pola.sub(
+                        r'\1',
+                        text
+                    )
+
+
+
+                review["Cleaning"] = (
+                    review["CaseFolding"]
+                    .apply(cleaningulasan)
+                    .apply(clearEmoji)
+                    .apply(replaceTOM)
+                )
+
+
+
+                review = review[
+                    review["Cleaning"]
+                    .str.strip() != ""
+                ]
+
+
+
+                # =========================
+                # TOKENIZING
+                # =========================
+
+                def tokenizingText(text):
+
+                    return word_tokenize(
+                        str(text)
+                    )
+
+
+                review["Tokenizing"] = (
+                    review["Cleaning"]
+                    .apply(tokenizingText)
+                )
+
+
+
+                # =========================
+                # FORMALISASI
+                # =========================
+
+                kamusSlang = {
+
+                    "yg":"yang",
+                    "gak":"tidak",
+                    "gk":"tidak",
+                    "ga":"tidak",
+                    "bgt":"banget",
+                    "aja":"saja",
+                    "udh":"sudah",
+                    "udah":"sudah",
+                    "tdk":"tidak",
+                    "krn":"karena",
+                    "sm":"sama",
+                    "utk":"untuk",
+                    "dr":"dari",
+                    "jg":"juga",
+                    "jd":"jadi",
+                    "tp":"tapi",
+                    "klo":"kalau",
+                    "blm":"belum",
+                    "apk":"aplikasi",
+                    "app":"aplikasi"
+                }
+
+
+
+                def formal_text(words):
+
+                    return [
+                        kamusSlang.get(
+                            word,
+                            word
+                        )
+                        for word in words
+                    ]
+
+
+
+                review["Formalisasi"] = (
+                    review["Tokenizing"]
+                    .apply(formal_text)
+                )
+
+
+
+                # =========================
+                # STOPWORD
+                # =========================
+
+                stopword = set(
+                    stopwords.words(
+                        "indonesian"
+                    )
+                )
+
+
+                stopword.update(
+                    [
+                        "yg",
+                        "dg",
+                        "rt",
+                        "aja",
+                        "nih",
+                        "sih"
+                    ]
+                )
+
+
+
+                def stopwordText(words):
+
+                    return [
+                        word
+                        for word in words
+                        if word not in stopword
+                    ]
+
+
+
+                review["WithoutStopwords"] = (
+                    review["Formalisasi"]
+                    .apply(stopwordText)
+                )
+
+
+
+                # =========================
+                # STEMMING
+                # =========================
+
+                factory = StemmerFactory()
+
+                stemmer = (
+                    factory
+                    .create_stemmer()
+                )
+
+
+                def stemmingText(words):
+
+                    text = " ".join(words)
+
+                    return stemmer.stem(text)
+
+
+
+                review["Stemming"] = (
+                    review["WithoutStopwords"]
+                    .apply(stemmingText)
+                )
+
+
+
+                # =========================
+                # LABELING
+                # =========================
+
+                positif = [
+
+                    "bagus",
+                    "baik",
+                    "cepat",
+                    "mudah",
+                    "mantap",
+                    "membantu",
+                    "puas",
+                    "praktis",
+                    "lancar",
+                    "aman",
+                    "nyaman"
+
+                ]
+
+
+                negatif = [
+
+                    "buruk",
+                    "error",
+                    "gagal",
+                    "lambat",
+                    "lemot",
+                    "susah",
+                    "ribet",
+                    "kecewa",
+                    "masalah",
+                    "kendala",
+                    "rusak"
+
+                ]
+
+
+
+                def labeling(text):
+
+                    text = str(text)
+
+
+                    skor = 0
+
+
+                    for kata in positif:
+
+                        if kata in text:
+                            skor += 1
+
+
+                    for kata in negatif:
+
+                        if kata in text:
+                            skor -= 1
+
+
+
+                    if skor > 0:
+
+                        return "Positif"
+
+
+                    elif skor < 0:
+
+                        return "Negatif"
+
+
+                    else:
+
+                        return "Netral"
+
+
+
+                review["Label"] = (
+                    review["Cleaning"]
+                    .apply(labeling)
+                )
+
+
+
+            st.success(
+                "✅ Preprocessing selesai"
+            )
+
+
+            st.subheader(
+                "📊 Hasil Preprocessing"
+            )
+
+
+            st.dataframe(
+                review[
+                    [
+                    "content",
+                    "CaseFolding",
+                    "Cleaning",
+                    "Tokenizing",
+                    "Formalisasi",
+                    "WithoutStopwords",
+                    "Stemming",
+                    "Label"
+                    ]
+                ],
+                use_container_width=True
+            )
+
+
+            st.subheader(
+                "📈 Distribusi Sentimen"
+            )
+
+
+            st.bar_chart(
+                review["Label"]
+                .value_counts()
+            )
+
+
+            # =========================
+            # DOWNLOAD
+            # =========================
+
+            output_file = (
+                "hasil_preprocessing_mobile_jkn.csv"
+            )
+
+
+            review.to_csv(
+                output_file,
+                index=False
+            )
+
+
+            with open(
+                output_file,
+                "rb"
+            ) as file:
+
+
+                st.download_button(
+
+                    label="📥 Download Hasil Preprocessing",
+
+                    data=file,
+
+                    file_name=output_file,
+
+                    mime="text/csv",
+
+                    use_container_width=True
+                )
     
 
 
