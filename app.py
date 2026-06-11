@@ -13,7 +13,7 @@ from sklearn.metrics import (
 
 from sklearn.model_selection import train_test_split
 if "page" not in st.session_state:
-    st.session_state.page = "home"
+    st.session_state.page = "Home"
 
 # =====================================================
 # CONFIG PAGE
