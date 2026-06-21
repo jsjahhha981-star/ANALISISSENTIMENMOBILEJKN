@@ -7,3 +7,4 @@ nltk
 Sastrawi
 joblib
 tensorflow
+plotly
