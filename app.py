@@ -3,6 +3,7 @@ import streamlit as st
 import pandas as pd
 import joblib
 import matplotlib.pyplot as plt
+import numpy as np
 
 from sklearn.metrics import (
     accuracy_score,
@@ -26,15 +27,32 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# =====================================================
+## ==========================================
 # LOAD MODEL
-# =====================================================
+# ==========================================
 
-model = joblib.load("model_sentimen.pkl")
+@st.cache_resource
+def load_models():
 
-# =====================================================
-# DEFAULT VARIABLE
-# =====================================================
+    models = {
+
+        "SVM + TF-IDF":
+        joblib.load("models/svm_tfidf.pkl"),
+
+        "SVM + LSA":
+        joblib.load("models/svm_lsa.pkl"),
+
+        "NB + TF-IDF":
+        joblib.load("models/nb_tfidf.pkl"),
+
+        "NB + LSA":
+        joblib.load("models/nb_lsa.pkl")
+
+    }
+
+    return models
+
+models = load_models()
 
 submit = False
 clear = False
@@ -482,6 +500,8 @@ with st.sidebar:
 
     if st.button("Riwayat", use_container_width=True):
         st.session_state.page = "Riwayat"
+    if st.button("Visualisasi Perbandingan Model", use_container_width=True):
+        st.session_state.page = "Visualisasi Perbandingan Model"
 
     st.divider()
 
@@ -652,50 +672,27 @@ if page == "Home":
 
 elif page == "Prediksi":
 
-    # =====================================================
-    # CSS FORM
-    # =====================================================
-
     st.markdown("""
     <style>
 
     .form-container{
-        background: white;
-        padding: 35px;
-        border-radius: 20px;
-        box-shadow: 0px 4px 20px rgba(0,0,0,0.08);
-        margin-top: 20px;
+        background:white;
+        padding:35px;
+        border-radius:20px;
+        box-shadow:0px 4px 20px rgba(0,0,0,0.08);
+        margin-top:20px;
     }
 
     .form-title{
-        font-size: 32px;
-        font-weight: bold;
-        color: #c96c6c;
-        margin-bottom: 25px;
-        text-align: center;
-    }
-
-    .result-container{
-        background: white;
-        padding: 30px;
-        border-radius: 20px;
-        margin-top: 30px;
-        box-shadow: 0px 4px 20px rgba(0,0,0,0.08);
-    }
-
-    .result-title{
-        font-size: 28px;
-        font-weight: bold;
-        color: #c96c6c;
-        margin-bottom: 20px;
+        font-size:32px;
+        font-weight:bold;
+        color:#c96c6c;
+        margin-bottom:25px;
+        text-align:center;
     }
 
     </style>
     """, unsafe_allow_html=True)
-
-    # =====================================================
-    # FORM INPUT
-    # =====================================================
 
     st.markdown("""
     <div class="form-container">
@@ -714,19 +711,18 @@ elif page == "Prediksi":
         placeholder="Tulis ulasan aplikasi Mobile JKN disini...",
         height=180
     )
-    # =====================================
-    # BUTTON
-    # =====================================
 
     tombol1, tombol2 = st.columns(2)
 
     with tombol1:
+
         submit = st.button(
             "Prediksi",
             use_container_width=True
         )
 
     with tombol2:
+
         upload_btn = st.button(
             "Upload Dataset",
             use_container_width=True
@@ -736,64 +732,281 @@ elif page == "Prediksi":
             st.session_state.page = "Upload Dataset"
             st.rerun()
 
-# =====================================================
-# HASIL PREDIKSI
-# =====================================================
+    st.markdown("</div>", unsafe_allow_html=True)
 
-if submit:
+    # =====================================================
+    # HASIL PREDIKSI
+    # =====================================================
 
-    if user_input.strip() != "":
+    if submit:
 
-        hasil = model.predict([user_input])
-        sentimen = hasil[0]
+        if user_input.strip() == "":
 
-        # =====================================================
-        # SIMPAN RIWAYAT
-        # =====================================================
+            st.warning(
+                "⚠️ Masukkan ulasan terlebih dahulu!"
+            )
 
-        st.session_state.riwayat.append({
-            "Nama": nama,
-            "Ulasan": user_input,
-            "Sentimen": sentimen
-        })
+        else:
 
-        with st.container():
+            hasil_prediksi = []
 
-            st.markdown("""
-            <div style="
-                background:white;
-                padding:30px;
-                border-radius:20px;
-                box-shadow:0 4px 15px rgba(0,0,0,0.08);
-                margin-top:20px;
-            ">
-            """, unsafe_allow_html=True)
+            for nama_model, model in models.items():
 
-            col1, col2 = st.columns([1,2])
+                sentimen = model.predict(
+                    [user_input]
+                )[0]
+
+                # =====================================
+                # HITUNG CONFIDENCE
+                # =====================================
+
+                try:
+
+                    proba = model.predict_proba(
+                        [user_input]
+                    )[0]
+
+                    confidence = round(
+                        max(proba) * 100,
+                        2
+                    )
+
+                except:
+
+                    try:
+
+                        score = model.decision_function(
+                            [user_input]
+                        )
+
+                        confidence = round(
+                            (
+                                1 /
+                                (
+                                    1 +
+                                    np.exp(
+                                        -np.max(score)
+                                    )
+                                )
+                            ) * 100,
+                            2
+                        )
+
+                    except:
+
+                        confidence = 0
+
+                hasil_prediksi.append({
+
+                    "Model": nama_model,
+
+                    "Sentimen": sentimen,
+
+                    "Confidence (%)": confidence
+
+                })
+
+            df_hasil = pd.DataFrame(
+                hasil_prediksi
+            )
+
+            # =====================================
+            # # MODEL DENGAN CONFIDENCE TERTINGGI
+            # # =====================================
+            model_terbaik = df_hasil.loc[
+                df_hasil["Confidence (%)"].idxmax()
+                ]
+            nama_model_terbaik = model_terbaik["Model"]
+            sentimen_terbaik = model_terbaik["Sentimen"]
+            confidence_terbaik = model_terbaik["Confidence (%)"]
+
+            # =====================================
+            # SIMPAN RIWAYAT
+            # =====================================
+
+            st.session_state.riwayat.append({
+
+    "Nama": nama,
+    "Ulasan": user_input,
+
+    # ======================
+    # SENTIMEN 4 MODEL
+    # ======================
+
+    "SVM + TF-IDF":
+    df_hasil.loc[
+        df_hasil["Model"] == "SVM + TF-IDF",
+        "Sentimen"
+    ].values[0],
+
+    "SVM + LSA":
+    df_hasil.loc[
+        df_hasil["Model"] == "SVM + LSA",
+        "Sentimen"
+    ].values[0],
+
+    "NB + TF-IDF":
+    df_hasil.loc[
+        df_hasil["Model"] == "NB + TF-IDF",
+        "Sentimen"
+    ].values[0],
+
+    "NB + LSA":
+    df_hasil.loc[
+        df_hasil["Model"] == "NB + LSA",
+        "Sentimen"
+    ].values[0],
+
+    # ======================
+    # CONFIDENCE 4 MODEL
+    # ======================
+
+    "Conf SVM + TF-IDF":
+    df_hasil.loc[
+        df_hasil["Model"] == "SVM + TF-IDF",
+        "Confidence (%)"
+    ].values[0],
+
+    "Conf SVM + LSA":
+    df_hasil.loc[
+        df_hasil["Model"] == "SVM + LSA",
+        "Confidence (%)"
+    ].values[0],
+
+    "Conf NB + TF-IDF":
+    df_hasil.loc[
+        df_hasil["Model"] == "NB + TF-IDF",
+        "Confidence (%)"
+    ].values[0],
+
+    "Conf NB + LSA":
+    df_hasil.loc[
+        df_hasil["Model"] == "NB + LSA",
+        "Confidence (%)"
+    ].values[0],
+
+    # ======================
+    # MODEL TERBAIK
+    # ======================
+
+    "Model Terbaik":
+    nama_model_terbaik,
+
+    "Sentimen Terbaik":
+    sentimen_terbaik,
+
+    "Confidence Terbaik":
+    confidence_terbaik
+
+})
+
+            # =====================================
+            # HASIL
+            # =====================================
+
+            st.markdown("---")
+
+            st.subheader(
+                "Hasil Prediksi Sentimen"
+            )
+
+            col1, col2 = st.columns([1, 2])
 
             with col1:
-                st.markdown("### NAMA")
+
+                st.markdown("### Nama")
                 st.info(nama)
 
             with col2:
-                st.markdown("### ULASAN")
+
+                st.markdown("### Ulasan")
                 st.success(user_input)
 
-            st.markdown("HASIL SENTIMEN")
+            
 
-            if sentimen == "Positif":
-                st.success("😊 Positif")
+            # =====================================
+            # CARD MODEL
+            # =====================================
 
-            elif sentimen == "Negatif":
-                st.error("😠 Negatif")
+            st.subheader(
+                "Confidence Setiap Model"
+            )
 
+            col1, col2 = st.columns(2)
+
+            with col1:
+
+                svm_tfidf = df_hasil[
+                    df_hasil["Model"] ==
+                    "SVM + TF-IDF"
+                ].iloc[0]
+
+                svm_lsa = df_hasil[
+                    df_hasil["Model"] ==
+                    "SVM + LSA"
+                ].iloc[0]
+
+                st.metric(
+                    "SVM + TF-IDF",
+                    svm_tfidf["Sentimen"],
+                    f"{svm_tfidf['Confidence (%)']}%"
+                )
+
+                st.metric(
+                    "SVM + LSA",
+                    svm_lsa["Sentimen"],
+                    f"{svm_lsa['Confidence (%)']}%"
+                )
+
+            with col2:
+
+                nb_tfidf = df_hasil[
+                    df_hasil["Model"] ==
+                    "NB + TF-IDF"
+                ].iloc[0]
+
+                nb_lsa = df_hasil[
+                    df_hasil["Model"] ==
+                    "NB + LSA"
+                ].iloc[0]
+
+                st.metric(
+                    "NB + TF-IDF",
+                    nb_tfidf["Sentimen"],
+                    f"{nb_tfidf['Confidence (%)']}%"
+                )
+
+                st.metric(
+                    "NB + LSA",
+                    nb_lsa["Sentimen"],
+                    f"{nb_lsa['Confidence (%)']}%"
+                )
+
+            # =====================================
+            # # MODEL DENGAN CONFIDENCE TERTINGGI
+            # # =====================================
+            st.subheader(
+                "Model dengan Confidence Tertinggi"
+                )
+            st.info(
+                f"Model Terpilih : {nama_model_terbaik}"
+                )
+            if sentimen_terbaik == "Positif":
+                st.success(
+                    f"😊 Sentimen : {sentimen_terbaik}"
+                    )
+            elif sentimen_terbaik == "Negatif":
+                st.error(
+                    f"😠 Sentimen : {sentimen_terbaik}"
+                    )
             else:
-                st.warning("😐 Netral")
-
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    else:
-        st.warning("⚠️ Masukkan ulasan terlebih dahulu!")
+                st.warning(
+                    f"😐 Sentimen : {sentimen_terbaik}"
+                    )
+                st.metric(
+                    "Confidence Score",
+                    f"{confidence_terbaik}%"
+)
 # =====================================================
 # MENU UPLOAD DATASET
 # =====================================================
@@ -801,304 +1014,398 @@ if submit:
 elif page == "Upload Dataset":
 
     import pandas as pd
+    import numpy as np
     import matplotlib.pyplot as plt
 
-    from sklearn.model_selection import train_test_split
-    from sklearn.metrics import (
-        accuracy_score,
-        classification_report,
-        confusion_matrix,
-        ConfusionMatrixDisplay
-    )
 
+    
     st.markdown("""
-    <style>
-
-    .form-container{
-        background:white;
-        padding:35px;
+    <div style="
+        background:#b08968;
+        padding:30px;
         border-radius:20px;
-        box-shadow:0px 4px 20px rgba(0,0,0,0.08);
-        margin-top:20px;
-    }
-
-    .form-title{
-        font-size:32px;
-        font-weight:bold;
-        color:#c96c6c;
         text-align:center;
-        margin-bottom:20px;
-    }
-
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.markdown("""
-    <div class="form-container">
-        <div class="form-title">
-            UPLOAD DATASET HASIL PREPROCESSING
-        </div>
+    ">
+    <h1 style="color:white">
+    UPLOAD DATASET HASIL PREPROCESSING
+    </h1>
     </div>
     """, unsafe_allow_html=True)
 
+
+
     uploaded_file = st.file_uploader(
-        "Upload File CSV Hasil Preprocessing",
+        "Upload File CSV",
         type=["csv"]
     )
+
 
     if uploaded_file is not None:
 
         try:
 
-            # ==========================
-            # LOAD DATA
-            # ==========================
+
+            # ==========================================
+            # BACA CSV
+            # ==========================================
 
             data = pd.read_csv(
                 uploaded_file,
-                sep=",",
-                encoding="utf-8",
-                engine="python",
-                on_bad_lines="skip"
+                sep=None,
+                engine="python"
             )
+
+
+            data.columns = data.columns.str.strip()
+
 
             st.success(
                 "✅ Dataset berhasil diupload"
             )
 
-            # ==========================
-            # CEK KOLOM
-            # ==========================
+
+            st.write(
+                "Kolom Dataset:",
+                data.columns.tolist()
+            )
+
+
+            # ==========================================
+            # CEK STEMMING
+            # ==========================================
 
             if "Stemming" not in data.columns:
 
                 st.error(
-                    "Kolom 'Stemming' tidak ditemukan."
+                    "Kolom Stemming tidak ditemukan"
                 )
 
                 st.stop()
 
-            if "Label" not in data.columns:
 
-                st.error(
-                    "Kolom 'Label' tidak ditemukan."
-                )
 
-                st.stop()
-
-            # ==========================
-            # HAPUS DATA KOSONG
-            # ==========================
+            # ==========================================
+            # BERSIHKAN DATA
+            # ==========================================
 
             data = data.dropna(
-                subset=["Stemming", "Label"]
+                subset=["Stemming"]
             )
 
+
             data = data[
-                (data["Stemming"].astype(str).str.strip() != "")
-                &
-                (data["Label"].astype(str).str.strip() != "")
+                data["Stemming"]
+                .astype(str)
+                .str.strip() != ""
             ]
 
-            # ==========================
-            # PREVIEW DATA
-            # ==========================
 
-            st.subheader("📄 Preview Dataset")
+
+            # ==========================================
+            # PREVIEW
+            # ==========================================
+
+            st.subheader(
+                "Preview Dataset"
+            )
+
 
             st.dataframe(
                 data.head(),
                 use_container_width=True
             )
 
-            # ==========================
-            # TOMBOL PROSES
-            # ==========================
 
-            if st.button("🚀 Proses Analisis Sentimen"):
+            total_data = len(data)
 
-                with st.spinner(
-                    "Melakukan analisis..."
+
+            st.info(
+                f"Jumlah Data : {total_data}"
+            )
+
+
+
+            jumlah_data = st.slider(
+                "Pilih jumlah data",
+                1,
+                total_data,
+                min(100,total_data)
+            )
+
+
+            data_analisis = data.head(
+                jumlah_data
+            )
+
+
+
+            if st.button(
+                "🚀 Mulai Analisis",
+                use_container_width=True
+            ):
+
+
+
+                hasil_semua = []
+
+
+                progress = st.progress(0)
+
+
+
+                # =====================================
+                # PREDIKSI SEMUA MODEL
+                # =====================================
+
+
+                for i,text in enumerate(
+                    data_analisis["Stemming"]
                 ):
 
-                    # ==========================
-                    # FITUR & LABEL
-                    # ==========================
 
-                    X = data["Stemming"].astype(str)
+                    hasil_prediksi = []
 
-                    y = data["Label"].astype(str)
 
-                    # ==========================
-                    # SPLIT DATA
-                    # ==========================
+                    for nama_model, model in models.items():
 
-                    X_train, X_test, y_train, y_test = train_test_split(
-                        X,
-                        y,
-                        test_size=0.2,
-                        random_state=42,
-                        stratify=y
-                    )
 
-                    # =====================================================
-                    # # PREDIKSI
-                    # # =====================================================
-                    prediksi = model.predict(X_test)
-                    hasil_df = pd.DataFrame({
-                    'Text': X_test.values,
-                    'Label Asli': y_test.values,
-                    'Prediksi': prediksi
-                })
+                        prediksi = model.predict(
+                            [str(text)]
+                        )[0]
 
-                    st.success(
-                        "✅ Analisis berhasil dilakukan"
-                    )
 
-                    st.subheader(
-                        "📊 Hasil Prediksi"
-                    )
 
-                    st.dataframe(
-                        hasil_df,
-                        use_container_width=True
-                    )
+                        # CONFIDENCE
 
-                    # ==========================
-                    # AKURASI
-                    # ==========================
+                        try:
 
-                    accuracy = accuracy_score(
-                        y_test,
-                        prediksi
-                    )
+                            proba = model.predict_proba(
+                                [str(text)]
+                            )[0]
 
-                    st.subheader(
-                        "🎯 Akurasi Model"
-                    )
 
-                    st.metric(
-                        "Accuracy",
-                        f"{accuracy:.2%}"
-                    )
-
-                    # ==========================
-                    # CLASSIFICATION REPORT
-                    # ==========================
-
-                    st.subheader(
-                        "📋 Classification Report"
-                    )
-
-                    report = classification_report(
-                        y_test,
-                        prediksi,
-                        output_dict=True
-                    )
-
-                    report_df = (
-                        pd.DataFrame(report)
-                        .transpose()
-                    )
-
-                    st.dataframe(
-                        report_df,
-                        use_container_width=True
-                    )
-
-                    # ==========================
-                    # GRAFIK
-                    # ==========================
-
-                    col1, col2 = st.columns(2)
-
-                    with col1:
-
-                        st.subheader(
-                            "📈 Distribusi Prediksi"
-                        )
-
-                        sentimen_count = (
-                            pd.Series(prediksi)
-                            .value_counts()
-                        )
-
-                        fig1, ax1 = plt.subplots(
-                            figsize=(6,5)
-                        )
-
-                        ax1.bar(
-                            sentimen_count.index,
-                            sentimen_count.values
-                        )
-
-                        ax1.set_xlabel(
-                            "Sentimen"
-                        )
-
-                        ax1.set_ylabel(
-                            "Jumlah"
-                        )
-
-                        ax1.set_title(
-                            "Distribusi Sentimen"
-                        )
-
-                        st.pyplot(fig1)
-
-                    with col2:
-
-                        st.subheader(
-                            "📊 Confusion Matrix"
-                        )
-
-                        cm = confusion_matrix(
-                            y_test,
-                            prediksi
-                        )
-
-                        fig2, ax2 = plt.subplots(
-                            figsize=(6,5)
-                        )
-
-                        disp = (
-                            ConfusionMatrixDisplay(
-                                confusion_matrix=cm
+                            confidence = round(
+                                max(proba)*100,
+                                2
                             )
-                        )
 
-                        disp.plot(ax=ax2)
 
-                        st.pyplot(fig2)
+                        except:
 
-                    # ==========================
-                    # DOWNLOAD
-                    # ==========================
 
-                    csv = hasil_df.to_csv(
-                        index=False
-                    ).encode("utf-8")
+                            try:
 
-                    st.download_button(
+                                score = model.decision_function(
+                                    [str(text)]
+                                )
 
-                        label="📥 Download Hasil Prediksi",
 
-                        data=csv,
+                                confidence = round(
+                                    (
+                                    1 /
+                                    (
+                                    1 +
+                                    np.exp(
+                                    -np.max(score)
+                                    )
+                                    )
+                                    )*100,
+                                    2
+                                )
 
-                        file_name=
-                        "hasil_prediksi_sentimen.csv",
 
-                        mime="text/csv",
+                            except:
 
-                        use_container_width=True
+                                confidence = 0
+
+
+
+                        hasil_prediksi.append({
+
+                            "Model":
+                            nama_model,
+
+                            "Sentimen":
+                            prediksi,
+
+                            "Confidence":
+                            confidence
+
+                        })
+
+
+
+
+                    df_temp = pd.DataFrame(
+                        hasil_prediksi
                     )
+
+
+
+                    terbaik = df_temp.loc[
+                        df_temp["Confidence"]
+                        .idxmax()
+                    ]
+
+
+
+                    hasil_semua.append({
+
+
+                        "Text":
+                        str(text),
+
+
+                        "SVM + TF-IDF":
+                        df_temp.loc[
+                            df_temp.Model=="SVM + TF-IDF",
+                            "Sentimen"
+                        ].values[0],
+
+
+                        "Conf SVM + TF-IDF":
+                        df_temp.loc[
+                            df_temp.Model=="SVM + TF-IDF",
+                            "Confidence"
+                        ].values[0],
+
+
+
+                        "SVM + LSA":
+                        df_temp.loc[
+                            df_temp.Model=="SVM + LSA",
+                            "Sentimen"
+                        ].values[0],
+
+
+                        "Conf SVM + LSA":
+                        df_temp.loc[
+                            df_temp.Model=="SVM + LSA",
+                            "Confidence"
+                        ].values[0],
+
+
+
+                        "NB + TF-IDF":
+                        df_temp.loc[
+                            df_temp.Model=="NB + TF-IDF",
+                            "Sentimen"
+                        ].values[0],
+
+
+                        "Conf NB + TF-IDF":
+                        df_temp.loc[
+                            df_temp.Model=="NB + TF-IDF",
+                            "Confidence"
+                        ].values[0],
+
+
+
+                        "NB + LSA":
+                        df_temp.loc[
+                            df_temp.Model=="NB + LSA",
+                            "Sentimen"
+                        ].values[0],
+
+
+                        "Conf NB + LSA":
+                        df_temp.loc[
+                            df_temp.Model=="NB + LSA",
+                            "Confidence"
+                        ].values[0],
+
+
+
+                        "Model Terbaik":
+                        terbaik["Model"],
+
+
+                        "Sentimen Terbaik":
+                        terbaik["Sentimen"],
+
+
+                        "Confidence Terbaik":
+                        terbaik["Confidence"]
+
+                    })
+
+
+
+                    progress.progress(
+                        (i+1)/jumlah_data
+                    )
+
+
+
+                # =====================================
+                # HASIL
+                # =====================================
+
+
+                hasil_df = pd.DataFrame(
+                    hasil_semua
+                )
+                # SIMPAN HASIL UNTUK MENU PERBANDINGAN
+                st.session_state["hasil_upload"] = hasil_df
+                st.session_state["data_uji"] = data_analisis
+
+
+                st.success(
+                    "✅ Analisis selesai"
+                )
+
+
+
+                st.subheader(
+                    "Hasil Analisis Dataset"
+                )
+
+
+
+                st.dataframe(
+                    hasil_df,
+                    use_container_width=True,
+                    height=500
+                )
+
+
+
+
+
+                # =====================================
+                # DOWNLOAD CSV
+                # =====================================
+
+
+                csv = hasil_df.to_csv(
+                    index=False
+                ).encode("utf-8")
+
+
+
+                st.download_button(
+
+                    "⬇️ Download Hasil Analisis",
+
+                    data=csv,
+
+                    file_name=
+                    "hasil_analisis_dataset.csv",
+
+                    mime="text/csv",
+
+                    use_container_width=True
+
+                )
+
+
 
         except Exception as e:
 
-            st.error(
-                f"❌ Error : {e}"
-            )
 
+            st.error(
+                f"❌ Error : {str(e)}"
+            )
 
 # =====================================================
 # MENU RIWAYAT
@@ -1107,140 +1414,120 @@ elif page == "Upload Dataset":
 elif page == "Riwayat":
 
     import pandas as pd
-
-    # =====================================================
-    # SESSION STATE
-    # =====================================================
+    import plotly.express as px
 
     if "riwayat" not in st.session_state:
         st.session_state.riwayat = []
 
     # =====================================================
-    # CUSTOM CSS
+    # CSS
     # =====================================================
 
     st.markdown("""
     <style>
 
-    /* Background */
-    .main {
-        background: linear-gradient(
-            to bottom right,
-            #fff7f7,
-            #ffeaea
+    .history-header{
+        background:linear-gradient(
+            135deg,
+            #c96c6c,
+            #e89b9b
         );
+        padding:30px;
+        border-radius:20px;
+        text-align:center;
+        margin-bottom:25px;
+        box-shadow:0 5px 20px rgba(0,0,0,0.08);
     }
 
-    /* HEADER */
     .history-title{
-        font-size: 40px;
-        font-weight: 800;
-        text-align: center;
-        color: #c96c6c;
-        margin-bottom: 8px;
+        color:white;
+        font-size:36px;
+        font-weight:700;
     }
 
     .history-subtitle{
-        text-align: center;
-        color: #777;
-        font-size: 17px;
-        margin-bottom: 35px;
+        color:white;
+        font-size:16px;
     }
 
-    /* METRIC CARD */
-    .metric-card{
-        background: white;
-        padding: 28px;
-        border-radius: 22px;
-        box-shadow: 0 8px 25px rgba(0,0,0,0.08);
-        text-align: center;
-        transition: 0.3s;
-        border: 1px solid rgba(0,0,0,0.05);
+    .metric-box{
+        background:white;
+        padding:25px;
+        border-radius:20px;
+        text-align:center;
+        box-shadow:0 4px 15px rgba(0,0,0,0.08);
     }
 
-    .metric-card:hover{
-        transform: translateY(-5px);
-    }
-
-    .metric-value{
-        font-size: 36px;
-        font-weight: bold;
-        color: #c96c6c;
+    .metric-number{
+        font-size:34px;
+        font-weight:bold;
+        color:#c96c6c;
     }
 
     .metric-label{
-        font-size: 16px;
-        color: #666;
-        margin-top: 8px;
+        color:#666;
+        font-size:15px;
     }
 
-    /* TABLE CONTAINER */
-    .table-container{
-        background: white;
-        padding: 30px;
-        border-radius: 25px;
-        margin-top: 30px;
-        box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+    .table-box{
+        background:white;
+        padding:20px;
+        border-radius:20px;
+        box-shadow:0 4px 15px rgba(0,0,0,0.08);
+        margin-top:20px;
     }
 
-    /* BUTTON STYLE */
+    .empty-box{
+        background:white;
+        padding:60px;
+        border-radius:20px;
+        text-align:center;
+        box-shadow:0 4px 15px rgba(0,0,0,0.08);
+    }
+
     div.stDownloadButton > button,
-    div.stButton > button {
-        height: 55px;
-        border-radius: 14px;
-        font-size: 16px;
-        font-weight: 600;
-        border: none;
-        width: 100%;
-        transition: 0.3s;
+    div.stButton > button{
+
+        width:100%;
+        height:60px;
+
+        border:none;
+        border-radius:15px;
+
+        font-size:17px;
+        font-weight:bold;
+
+        transition:0.3s;
+
+        box-shadow:0 4px 15px rgba(0,0,0,0.08);
     }
 
-    /* DOWNLOAD BUTTON */
-    div.stDownloadButton > button:hover {
-        background: linear-gradient(
+    div.stDownloadButton > button{
+
+        background:linear-gradient(
             135deg,
-            #d97b7b,
-            #c96c6c
+            #36d1dc,
+            #5b86e5
         );
-        color: white;
+
+        color:white;
     }
 
-    div.stDownloadButton > button:hover {
-        background: linear-gradient(
+    div.stButton > button{
+
+        background:linear-gradient(
             135deg,
-            #d97b7b,
-            #c96c6c
+            #ff6b6b,
+            #ee5253
         );
-        color: white;
+
+        color:white;
     }
 
-    /* DELETE BUTTON */
-    div.stButton > button:hover {
-        background: linear-gradient(
-            135deg,
-            #d97b7b,
-            #c96c6c
-        );
-        color: white;
-    }
+    div.stDownloadButton > button:hover,
+    div.stButton > button:hover{
 
-    div.stButton > button:hover {
-        background: linear-gradient(
-            135deg,
-            #c96c6c,
-            #b85b5b
-        );
-        color: white;
-    }
-
-    /* EMPTY CARD */
-    .empty-card{
-        background: rgba(255,255,255,0.97);
-        padding: 70px 40px;
-        border-radius: 30px;
-        text-align: center;
-        margin-top: 40px;
-        box-shadow: 0 8px 25px rgba(0,0,0,0.08);
+        transform:translateY(-3px);
     }
 
     </style>
@@ -1251,55 +1538,18 @@ elif page == "Riwayat":
     # =====================================================
 
     st.markdown("""
-    <style>
-
-    .form-container{
-        background: white;
-        padding: 35px;
-        border-radius: 20px;
-        box-shadow: 0px 4px 20px rgba(0,0,0,0.08);
-        margin-top: 20px;
-    }
-
-    .form-title{
-        font-size: 32px;
-        font-weight: bold;
-        color: #c96c6c;
-        margin-bottom: 25px;
-        text-align: center;
-    }
-
-    .result-container{
-        background: white;
-        padding: 30px;
-        border-radius: 20px;
-        margin-top: 30px;
-        box-shadow: 0px 4px 20px rgba(0,0,0,0.08);
-    }
-
-    .result-title{
-        font-size: 28px;
-        font-weight: bold;
-        color: #c96c6c;
-        margin-bottom: 20px;
-    }
-
-    </style>
-    """, unsafe_allow_html=True)
-
-    # =====================================================
-    # FORM INPUT
-    # =====================================================
-
-    st.markdown("""
-    <div class="form-container">
-        <div class="form-title">
+    <div class="history-header">
+        <div class="history-title">
             RIWAYAT PREDIKSI SENTIMEN
         </div>
+        <div class="history-subtitle">
+            Hasil Analisis Sentimen Aplikasi Mobile JKN
+        </div>
+    </div>
     """, unsafe_allow_html=True)
 
     # =====================================================
-    # JIKA ADA RIWAYAT
+    # JIKA ADA DATA
     # =====================================================
 
     if len(st.session_state.riwayat) > 0:
@@ -1309,39 +1559,39 @@ elif page == "Riwayat":
         )
 
         # =====================================================
-        # HITUNG DATA
+        # STATISTIK
         # =====================================================
 
         total_data = len(riwayat_df)
 
         positif = len(
             riwayat_df[
-                riwayat_df["Sentimen"] == "Positif"
+                riwayat_df["Sentimen Terbaik"] == "Positif"
             ]
         )
 
         negatif = len(
             riwayat_df[
-                riwayat_df["Sentimen"] == "Negatif"
+                riwayat_df["Sentimen Terbaik"] == "Negatif"
             ]
         )
 
         netral = len(
             riwayat_df[
-                riwayat_df["Sentimen"] == "Netral"
+                riwayat_df["Sentimen Terbaik"] == "Netral"
             ]
         )
 
         # =====================================================
-        # CARD METRIC
+        # CARD STATISTIK
         # =====================================================
 
-        col1, col2, col3, col4 = st.columns(4)
+        col1,col2,col3,col4 = st.columns(4)
 
         with col1:
-            st.markdown(f"""<br>
-            <div class="metric-card">
-                <div class="metric-value">
+            st.markdown(f"""
+            <div class="metric-box">
+                <div class="metric-number">
                     {total_data}
                 </div>
                 <div class="metric-label">
@@ -1351,9 +1601,9 @@ elif page == "Riwayat":
             """, unsafe_allow_html=True)
 
         with col2:
-            st.markdown(f"""<br>
-            <div class="metric-card">
-                <div class="metric-value">
+            st.markdown(f"""
+            <div class="metric-box">
+                <div class="metric-number">
                     {positif}
                 </div>
                 <div class="metric-label">
@@ -1363,9 +1613,9 @@ elif page == "Riwayat":
             """, unsafe_allow_html=True)
 
         with col3:
-            st.markdown(f"""<br>
-            <div class="metric-card">
-                <div class="metric-value">
+            st.markdown(f"""
+            <div class="metric-box">
+                <div class="metric-number">
                     {negatif}
                 </div>
                 <div class="metric-label">
@@ -1375,9 +1625,9 @@ elif page == "Riwayat":
             """, unsafe_allow_html=True)
 
         with col4:
-            st.markdown(f"""<br>
-            <div class="metric-card">
-                <div class="metric-value">
+            st.markdown(f"""
+            <div class="metric-box">
+                <div class="metric-number">
                     {netral}
                 </div>
                 <div class="metric-label">
@@ -1386,68 +1636,590 @@ elif page == "Riwayat":
             </div>
             """, unsafe_allow_html=True)
 
-        # =====================================================
-        # TABLE
-        # =====================================================
-
-        st.markdown(
-            '<div class="table-container">',
-            unsafe_allow_html=True
-        )
-
-        st.subheader("DATA RIWAYAT")
-
-        st.dataframe(
-            riwayat_df,
-            use_container_width=True,
-            height=450
-        )
-
-        st.markdown(
-            "</div>",
-            unsafe_allow_html=True
-        )
-
         st.markdown("<br>", unsafe_allow_html=True)
 
         # =====================================================
-        # CSV
+        # CEK KOLOM CONFIDENCE
         # =====================================================
 
-        csv = riwayat_df.to_csv(
+        kolom_wajib = [
+
+            "Nama",
+            "Ulasan",
+
+            "SVM + TF-IDF",
+            "Conf SVM + TF-IDF",
+
+            "SVM + LSA",
+            "Conf SVM + LSA",
+
+            "NB + TF-IDF",
+            "Conf NB + TF-IDF",
+
+            "NB + LSA",
+            "Conf NB + LSA",
+
+            "Model Terbaik",
+            "Sentimen Terbaik",
+            "Confidence Terbaik"
+
+        ]
+
+        kolom_tampil = [
+            col for col in kolom_wajib
+            if col in riwayat_df.columns
+        ]
+
+        tampil_df = riwayat_df[kolom_tampil]
+
+        # =====================================================
+        # TABEL
+        # =====================================================
+
+        st.markdown(
+            '<div class="table-box">',
+            unsafe_allow_html=True
+        )
+
+        st.subheader(
+            "DATA RIWAYAT PREDIKSI"
+        )
+
+        st.dataframe(
+            tampil_df,
+            use_container_width=True,
+            height=500
+        )
+
+        st.markdown(
+            '</div>',
+            unsafe_allow_html=True
+        )
+
+
+        # =====================================================
+        # DOWNLOAD CSV
+        # =====================================================
+
+        csv = tampil_df.to_csv(
             index=False
-        ).encode('utf-8')
+        ).encode("utf-8")
 
-        # =====================================================
-        # BUTTON
-        # =====================================================
+        st.markdown("<br>", unsafe_allow_html=True)
 
-        col_btn1, col_btn2 = st.columns(2)
+        col1,col2 = st.columns(2)
 
-        with col_btn1:
+        with col1:
 
             st.download_button(
-                label="⬇️ Download CSV",
+                label="📥 Download Riwayat CSV",
                 data=csv,
-                file_name='riwayat_sentimen.csv',
-                mime='text/csv',
+                file_name="riwayat_sentimen.csv",
+                mime="text/csv",
                 use_container_width=True
             )
 
-        with col_btn2:
+        # =====================================================
+        # HAPUS RIWAYAT
+        # =====================================================
+
+        with col2:
 
             if st.button(
-                "🗑️ Hapus Riwayat",
+                "🗑️ Hapus Semua Riwayat",
                 use_container_width=True
             ):
 
                 st.session_state.riwayat = []
 
                 st.success(
-                    "✅ Riwayat berhasil dihapus"
+                    "Riwayat berhasil dihapus."
                 )
 
                 st.rerun()
+# =====================================================
+# MENU PERBANDINGAN MODEL
+# =====================================================
+
+# =====================================================
+# MENU PERBANDINGAN MODEL
+# =====================================================
+
+elif page == "Visualisasi Perbandingan Model":
+
+
+    import pandas as pd
+    import matplotlib.pyplot as plt
+
+    from sklearn.metrics import (
+        accuracy_score,
+        confusion_matrix,
+        classification_report
+    )
+
+
+    # =====================================================
+    # CSS
+    # =====================================================
+
+    st.markdown("""
+    <style>
+
+    .history-header{
+        background:linear-gradient(
+            135deg,
+            #c96c6c,
+            #e89b9b
+        );
+        padding:30px;
+        border-radius:20px;
+        text-align:center;
+        margin-bottom:25px;
+        box-shadow:0 5px 20px rgba(0,0,0,0.08);
+    }
+
+    .history-title{
+        color:white;
+        font-size:36px;
+        font-weight:700;
+    }
+
+    .history-subtitle{
+        color:white;
+        font-size:16px;
+    }
+
+    .metric-box{
+        background:white;
+        padding:25px;
+        border-radius:20px;
+        text-align:center;
+        box-shadow:0 4px 15px rgba(0,0,0,0.08);
+    }
+
+    .metric-number{
+        font-size:34px;
+        font-weight:bold;
+        color:#c96c6c;
+    }
+
+    .metric-label{
+        color:#666;
+        font-size:15px;
+    }
+
+    .table-box{
+        background:white;
+        padding:20px;
+        border-radius:20px;
+        box-shadow:0 4px 15px rgba(0,0,0,0.08);
+        margin-top:20px;
+    }
+
+    .empty-box{
+        background:white;
+        padding:60px;
+        border-radius:20px;
+        text-align:center;
+        box-shadow:0 4px 15px rgba(0,0,0,0.08);
+    }
+
+    div.stDownloadButton > button,
+    div.stButton > button{
+
+        width:100%;
+        height:60px;
+
+        border:none;
+        border-radius:15px;
+
+        font-size:17px;
+        font-weight:bold;
+
+        transition:0.3s;
+
+        box-shadow:0 4px 15px rgba(0,0,0,0.08);
+    }
+
+    div.stDownloadButton > button{
+
+        background:linear-gradient(
+            135deg,
+            #36d1dc,
+            #5b86e5
+        );
+
+        color:white;
+    }
+
+    div.stButton > button{
+
+        background:linear-gradient(
+            135deg,
+            #ff6b6b,
+            #ee5253
+        );
+
+        color:white;
+    }
+
+    div.stDownloadButton > button:hover,
+    div.stButton > button:hover{
+
+        transform:translateY(-3px);
+    }
+
+    </style>
+    """, unsafe_allow_html=True)
+
+    # =====================================================
+    # HEADER
+    # =====================================================
+
+    st.markdown("""
+    <div class="history-header">
+        <div class="history-title">
+            VISUALISASI PERBANDINGAN MODEL
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+
+
+    # ==========================
+    # CEK DATA
+    # ==========================
+
+
+    if (
+        "data_uji" not in st.session_state
+        or
+        "hasil_upload" not in st.session_state
+    ):
+
+        st.warning(
+            "⚠️ Silahkan lakukan analisis pada menu Upload Dataset terlebih dahulu"
+        )
+
+        st.stop()
+
+
+
+    data = st.session_state["data_uji"]
+
+
+
+    # ==========================
+    # LABEL
+    # ==========================
+
+
+    if "Label" in data.columns:
+
+        label_col = "Label"
+
+
+    elif "Sentimen Asli" in data.columns:
+
+        label_col = "Sentimen Asli"
+
+
+    else:
+
+        st.error(
+            "Kolom label tidak ditemukan"
+        )
+
+        st.stop()
+
+
+
+    X = data["Stemming"].astype(str)
+
+    y_true = data[label_col]
+
+
+
+    hasil_akurasi = {}
+
+    detail_model = {}
+
+
+
+    # ==========================
+    # PROSES MODEL
+    # ==========================
+
+
+    for nama_model, model in models.items():
+
+
+        y_pred = model.predict(
+            X
+        )
+
+
+        acc = accuracy_score(
+            y_true,
+            y_pred
+        )
+
+
+
+        hasil_akurasi[nama_model] = round(
+            acc*100,
+            2
+        )
+
+
+        detail_model[nama_model] = {
+
+            "prediksi": y_pred
+
+        }
+
+
+
+    # ==========================
+    # SUMMARY CARD
+    # ==========================
+
+
+    st.subheader(
+        "RINGKASAN PERFORMA MODEL"
+    )
+
+
+
+    cols = st.columns(4)
+
+
+    for i,(model, nilai) in enumerate(
+        hasil_akurasi.items()
+    ):
+
+
+        with cols[i]:
+
+
+            st.metric(
+                model,
+                f"{nilai}%"
+            )
+
+
+
+    # MODEL TERBAIK
+
+    terbaik = max(
+        hasil_akurasi,
+        key=hasil_akurasi.get
+    )
+
+
+    st.success(
+        f"🥇 Model terbaik : {terbaik} dengan akurasi {hasil_akurasi[terbaik]}%"
+    )
+
+
+
+    st.divider()
+
+
+
+    # ==========================
+    # DETAIL MODEL
+    # ==========================
+
+
+    for nama_model, model in models.items():
+
+
+        with st.expander(
+            f"🔍 Detail Evaluasi : {nama_model}",
+            expanded=True
+        ):
+
+
+
+            y_pred = detail_model[nama_model]["prediksi"]
+
+
+
+            col1,col2 = st.columns([1,2])
+
+
+
+            # ------------------
+            # ACCURACY
+            # ------------------
+
+            with col1:
+
+
+                st.markdown(
+                    "### ACCURACY"
+                )
+
+
+                st.metric(
+                    "Score",
+                    f"{hasil_akurasi[nama_model]}%"
+                )
+
+
+
+
+            # ------------------
+            # CONFUSION MATRIX
+            # ------------------
+
+            with col2:
+
+
+                st.markdown(
+                    "### CONFUSION MATRIX"
+                )
+
+
+                cm = confusion_matrix(
+                    y_true,
+                    y_pred
+                )
+
+
+                cm_df = pd.DataFrame(
+                    cm,
+                    index=sorted(
+                        y_true.unique()
+                    ),
+                    columns=sorted(
+                        y_true.unique()
+                    )
+                )
+
+
+                st.dataframe(
+                    cm_df,
+                    use_container_width=True
+                )
+
+
+
+
+            # ------------------
+            # CLASSIFICATION REPORT
+            # ------------------
+
+
+            st.markdown(
+                "### CLASSIFICATION REPORT"
+            )
+
+
+            report = classification_report(
+                y_true,
+                y_pred,
+                output_dict=True
+            )
+
+
+
+            report_df = pd.DataFrame(
+                report
+            ).transpose()
+
+
+
+            st.dataframe(
+                report_df.style
+                .format("{:.3f}")
+                .set_properties(
+                    **{
+                    "text-align":"center"
+                    }
+                ),
+                use_container_width=True
+            )
+
+
+
+
+    # ==========================
+    # GRAFIK
+    # ==========================
+
+
+    st.divider()
+
+
+
+    st.subheader(
+        "GRAFIK PERBANDINGAN"
+    )
+
+
+
+    grafik = pd.DataFrame({
+
+        "Model":
+        list(hasil_akurasi.keys()),
+
+
+        "Akurasi":
+        list(hasil_akurasi.values())
+
+    })
+
+
+
+    fig,ax = plt.subplots(
+        figsize=(9,5)
+    )
+
+
+    ax.bar(
+        grafik["Model"],
+        grafik["Akurasi"]
+    )
+
+
+
+    ax.set_ylim(
+        0,
+        100
+    )
+
+
+    ax.set_ylabel(
+        "Akurasi (%)"
+    )
+
+
+    ax.set_title(
+        "Perbandingan Akurasi 4 Model"
+    )
+
+
+    plt.xticks(
+        rotation=25
+    )
+
+
+
+    for i,v in enumerate(
+        grafik["Akurasi"]
+    ):
+
+        ax.text(
+            i,
+            v+1,
+            f"{v}%",
+            ha="center"
+        )
+
+
+    st.pyplot(fig)
 elif page == "Preprocessing":
 
     import pandas as pd
