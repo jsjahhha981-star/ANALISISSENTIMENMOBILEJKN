@@ -1195,7 +1195,7 @@ elif page == "Upload Dataset":
 
             data["Tokenizing"] = (
                 data["Cleaning"]
-                .apply(word_tokenize)
+                .apply(lambda x: str(x).split())
             )
 
             # ==========================================
