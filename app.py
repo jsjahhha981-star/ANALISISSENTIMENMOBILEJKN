@@ -81,6 +81,9 @@ if "username" not in st.session_state:
 
 if "riwayat" not in st.session_state:
     st.session_state.riwayat = []
+    
+if "hasil_prediksi" not in st.session_state:
+    st.session_state.hasil_prediksi = pd.DataFrame()
 
 # =====================================================
 # FUNCTION REGISTER
@@ -825,6 +828,7 @@ elif page == "Prediksi":
             # =====================================
 
             st.session_state.riwayat.append({
+                
 
     "Nama": nama,
     "Ulasan": user_input,
@@ -899,6 +903,36 @@ elif page == "Prediksi":
     confidence_terbaik
 
 })
+            # =====================================
+            # # TABEL HASIL PREDIKSI
+            # # =====================================
+            if len(st.session_state.riwayat) > 0:
+                st.markdown("---")
+                st.subheader("TABEL HASIL PREDIKSI")
+                hasil_df = pd.DataFrame(
+                    st.session_state.riwayat
+                    )
+                kolom = [
+                    "Nama",
+                    "Ulasan",
+                    "SVM + TF-IDF",
+                    "Conf SVM + TF-IDF",
+                    "SVM + LSA",
+                    "Conf SVM + LSA",
+                    "NB + TF-IDF",
+                    "Conf NB + TF-IDF",
+                    "NB + LSA",
+                    "Conf NB + LSA",
+                    "Model Terbaik",
+                    "Sentimen Terbaik",
+                    "Confidence Terbaik"
+                    ]
+                st.dataframe(
+                    hasil_df[kolom],
+                    use_container_width=True,
+                    height=400
+                    )
+                
 
             # =====================================
             # HASIL
@@ -1007,390 +1041,595 @@ elif page == "Prediksi":
                     "Confidence Score",
                     f"{confidence_terbaik}%"
 )
-# =====================================================
-# MENU UPLOAD DATASET
-# =====================================================
-
 elif page == "Upload Dataset":
 
     import pandas as pd
     import numpy as np
-    import matplotlib.pyplot as plt
+    import re
+    import nltk
+    import streamlit as st
 
+    from nltk.tokenize import word_tokenize
+    from nltk.corpus import stopwords
+    from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
-    
+    nltk.download("punkt")
+    nltk.download("stopwords")
+
     st.markdown("""
-    <div style="
-        background:#b08968;
-        padding:30px;
+    <style>
+
+    .form-container{
+        background:white;
+        padding:35px;
         border-radius:20px;
+        box-shadow:0px 4px 20px rgba(0,0,0,0.08);
+        margin-top:20px;
+    }
+
+    .form-title{
+        font-size:32px;
+        font-weight:bold;
+        color:#c96c6c;
+        margin-bottom:25px;
         text-align:center;
-    ">
-    <h1 style="color:white">
-    UPLOAD DATASET HASIL PREPROCESSING
-    </h1>
-    </div>
+    }
+
+    </style>
     """, unsafe_allow_html=True)
 
+    st.markdown("""
+    <div class="form-container">
+        <div class="form-title">
+            INPUT DATA UNTUK ANALISIS SENTIMEN
+        </div>
+    """, unsafe_allow_html=True)
 
+    df_template = pd.DataFrame({
+        "userName": [""],
+        "content": [""]
+    })
 
-    uploaded_file = st.file_uploader(
-        "Upload File CSV",
-        type=["csv"]
+    data = st.data_editor(
+        df_template,
+        num_rows="dynamic",
+        use_container_width=True
     )
 
-
-    if uploaded_file is not None:
+    if data is not None:
 
         try:
 
-
             # ==========================================
-            # BACA CSV
-            # ==========================================
-
-            data = pd.read_csv(
-                uploaded_file,
-                sep=None,
-                engine="python"
-            )
-
-
-            data.columns = data.columns.str.strip()
-
-
-            st.success(
-                "✅ Dataset berhasil diupload"
-            )
-
-
-            st.write(
-                "Kolom Dataset:",
-                data.columns.tolist()
-            )
-
-
-            # ==========================================
-            # CEK STEMMING
+            # VALIDASI
             # ==========================================
 
-            if "Stemming" not in data.columns:
-
-                st.error(
-                    "Kolom Stemming tidak ditemukan"
-                )
-
-                st.stop()
-
-
-
-            # ==========================================
-            # BERSIHKAN DATA
-            # ==========================================
-
-            data = data.dropna(
-                subset=["Stemming"]
-            )
-
+            data = data.dropna(subset=["content"])
 
             data = data[
-                data["Stemming"]
+                data["content"]
                 .astype(str)
                 .str.strip() != ""
             ]
 
+            data = data.reset_index(drop=True)
 
+            if len(data) == 0:
 
-            # ==========================================
-            # PREVIEW
-            # ==========================================
+                st.warning("Masukkan minimal satu data.")
 
-            st.subheader(
-                "Preview Dataset"
-            )
+                st.stop()
 
+            st.subheader("DATA INPUT")
 
             st.dataframe(
-                data.head(),
+                data,
                 use_container_width=True
             )
 
+            # ==========================================
+            # CASE FOLDING
+            # ==========================================
 
-            total_data = len(data)
-
-
-            st.info(
-                f"Jumlah Data : {total_data}"
+            data["CaseFolding"] = (
+                data["content"]
+                .astype(str)
+                .str.lower()
+                .str.strip()
             )
 
+            # ==========================================
+            # CLEANING
+            # ==========================================
 
+            def clean_text(text):
 
-            jumlah_data = st.slider(
-                "Pilih jumlah data",
-                1,
-                total_data,
-                min(100,total_data)
+                text = str(text)
+
+                text = re.sub(
+                    r"http\S+|www\S+",
+                    "",
+                    text
+                )
+
+                text = re.sub(
+                    r"@\w+",
+                    "",
+                    text
+                )
+
+                text = re.sub(
+                    r"#\w+",
+                    "",
+                    text
+                )
+
+                text = re.sub(
+                    r"\d+",
+                    "",
+                    text
+                )
+
+                text = re.sub(
+                    r"[^\w\s]",
+                    "",
+                    text
+                )
+
+                text = re.sub(
+                    r"\s+",
+                    " ",
+                    text
+                )
+
+                return text.strip()
+
+            data["Cleaning"] = (
+                data["CaseFolding"]
+                .apply(clean_text)
             )
 
+            # ==========================================
+            # TOKENIZING
+            # ==========================================
 
-            data_analisis = data.head(
-                jumlah_data
+            data["Tokenizing"] = (
+                data["Cleaning"]
+                .apply(word_tokenize)
             )
 
+            # ==========================================
+            # STOPWORD
+            # ==========================================
 
+            stop_words = set(
+                stopwords.words("indonesian")
+            )
+
+            stop_words.update([
+                "yg",
+                "dg",
+                "aja",
+                "nih",
+                "sih",
+                "nya"
+            ])
+
+            data["WithoutStopwords"] = (
+                data["Tokenizing"]
+                .apply(
+                    lambda x: [
+                        word
+                        for word in x
+                        if word not in stop_words
+                    ]
+                )
+            )
+
+            # ==========================================
+            # NORMALIZATION
+            # ==========================================
+
+            norm_dict = {
+
+                "gk": "tidak",
+                "ga": "tidak",
+                "nggak": "tidak",
+                "tdk": "tidak",
+                "bgt": "banget",
+                "apk": "aplikasi",
+                "app": "aplikasi",
+                "krn": "karena",
+                "utk": "untuk",
+                "dr": "dari",
+                "udh": "sudah",
+                "blm": "belum"
+
+            }
+
+            data["Normalized"] = (
+                data["WithoutStopwords"]
+                .apply(
+                    lambda x: " ".join(
+                        [
+                            norm_dict.get(
+                                word,
+                                word
+                            )
+                            for word in x
+                        ]
+                    )
+                )
+            )
+
+            # ==========================================
+            # STEMMING
+            # ==========================================
+
+            factory = StemmerFactory()
+
+            stemmer = (
+                factory.create_stemmer()
+            )
+
+            data["Stemming"] = (
+                data["Normalized"]
+                .apply(
+                    lambda x:
+                    stemmer.stem(
+                        str(x)
+                    )
+                )
+            )
+
+            # ==========================================
+            # PREVIEW PREPROCESSING
+            # ==========================================
+
+            st.subheader(
+                "HASIL PREPROCESSING"
+            )
+
+            st.dataframe(
+
+                data[[
+                    "userName",
+                    "content",
+                    "CaseFolding",
+                    "Cleaning",
+                    "Tokenizing",
+                    "WithoutStopwords",
+                    "Normalized",
+                    "Stemming"
+                ]],
+
+                use_container_width=True
+
+            )
+
+            # ==========================================
+            # MULAI ANALISIS
+            # ==========================================
 
             if st.button(
                 "🚀 Mulai Analisis",
                 use_container_width=True
             ):
 
-
+                progress = st.progress(0)
 
                 hasil_semua = []
 
+                for i, row in data.iterrows():
 
-                progress = st.progress(0)
+                    text = str(
+                        row["Stemming"]
+                    )
 
-
-
-                # =====================================
-                # PREDIKSI SEMUA MODEL
-                # =====================================
-
-
-                for i,text in enumerate(
-                    data_analisis["Stemming"]
-                ):
-
-
-                    hasil_prediksi = []
-
+                    hasil_prediksi = {}
+                                        # ==========================================
+                    # PREDIKSI SEMUA MODEL
+                    # ==========================================
 
                     for nama_model, model in models.items():
 
-
-                        prediksi = model.predict(
-                            [str(text)]
-                        )[0]
-
-
-
-                        # CONFIDENCE
-
                         try:
 
-                            proba = model.predict_proba(
-                                [str(text)]
+                            prediksi = model.predict(
+                                [text]
                             )[0]
 
+                            # ==========================
+                            # CONFIDENCE
+                            # ==========================
 
-                            confidence = round(
-                                max(proba)*100,
-                                2
-                            )
+                            if hasattr(
+                                model,
+                                "predict_proba"
+                            ):
 
-
-                        except:
-
-
-                            try:
-
-                                score = model.decision_function(
-                                    [str(text)]
+                                probability = (
+                                    model.predict_proba(
+                                        [text]
+                                    )
                                 )
 
-
-                                confidence = round(
-                                    (
-                                    1 /
-                                    (
-                                    1 +
-                                    np.exp(
-                                    -np.max(score)
-                                    )
-                                    )
-                                    )*100,
-                                    2
+                                confidence = (
+                                    np.max(probability)
+                                    * 100
                                 )
 
+                            elif hasattr(
+                                model,
+                                "decision_function"
+                            ):
 
-                            except:
+                                decision = (
+                                    model.decision_function(
+                                        [text]
+                                    )
+                                )
+
+                                confidence = (
+                                    1
+                                    /
+                                    (
+                                        1
+                                        +
+                                        np.exp(
+                                            -np.max(decision)
+                                        )
+                                    )
+                                ) * 100
+
+                            else:
 
                                 confidence = 0
 
+                            hasil_prediksi[
+                                nama_model
+                            ] = {
 
+                                "Prediksi":
+                                prediksi,
 
-                        hasil_prediksi.append({
+                                "Confidence":
+                                round(
+                                    confidence,
+                                    2
+                                )
 
-                            "Model":
-                            nama_model,
+                            }
 
-                            "Sentimen":
-                            prediksi,
+                        except Exception as e:
 
-                            "Confidence":
-                            confidence
+                            st.warning(
+                                f"Model {nama_model} gagal diproses: {e}"
+                            )
 
-                        })
+                    # ==========================================
+                    # CEK HASIL PREDIKSI
+                    # ==========================================
 
-
-
-
-                    df_temp = pd.DataFrame(
+                    if len(
                         hasil_prediksi
+                    ) == 0:
+
+                        st.error(
+                            "Tidak ada model yang berhasil melakukan prediksi."
+                        )
+
+                        st.stop()
+
+                    # ==========================================
+                    # MODEL TERBAIK
+                    # ==========================================
+
+                    model_terbaik = max(
+
+                        hasil_prediksi.items(),
+
+                        key=lambda x:
+                        x[1]["Confidence"]
+
                     )
 
+                    # ==========================================
+                    # HASIL PER BARIS
+                    # ==========================================
 
+                    hasil_baris = {
 
-                    terbaik = df_temp.loc[
-                        df_temp["Confidence"]
-                        .idxmax()
+                        "userName":
+                        row["userName"],
+
+                        "content":
+                        row["content"],
+
+                        "CaseFolding":
+                        row["CaseFolding"],
+
+                        "Cleaning":
+                        row["Cleaning"],
+
+                        "Tokenizing":
+                        " ".join(
+                            row["Tokenizing"]
+                        ),
+
+                        "WithoutStopwords":
+                        " ".join(
+                            row["WithoutStopwords"]
+                        ),
+
+                        "Normalized":
+                        row["Normalized"],
+
+                        "Stemming":
+                        row["Stemming"]
+
+                    }
+
+                    # ==========================================
+                    # TAMBAHKAN HASIL SEMUA MODEL
+                    # ==========================================
+
+                    for nama_model, hasil in hasil_prediksi.items():
+
+                        hasil_baris[
+                            nama_model
+                        ] = hasil[
+                            "Prediksi"
+                        ]
+
+                        hasil_baris[
+                            f"Conf {nama_model}"
+                        ] = (
+                            f"{hasil['Confidence']:.2f}%"
+                        )
+
+                    # ==========================================
+                    # MODEL TERBAIK
+                    # ==========================================
+
+                    hasil_baris[
+                        "Model Terbaik"
+                    ] = model_terbaik[0]
+
+                    hasil_baris[
+                        "Sentimen Terbaik"
+                    ] = model_terbaik[1][
+                        "Prediksi"
                     ]
 
-
-
-                    hasil_semua.append({
-
-
-                        "Text":
-                        str(text),
-
-
-                        "SVM + TF-IDF":
-                        df_temp.loc[
-                            df_temp.Model=="SVM + TF-IDF",
-                            "Sentimen"
-                        ].values[0],
-
-
-                        "Conf SVM + TF-IDF":
-                        df_temp.loc[
-                            df_temp.Model=="SVM + TF-IDF",
-                            "Confidence"
-                        ].values[0],
-
-
-
-                        "SVM + LSA":
-                        df_temp.loc[
-                            df_temp.Model=="SVM + LSA",
-                            "Sentimen"
-                        ].values[0],
-
-
-                        "Conf SVM + LSA":
-                        df_temp.loc[
-                            df_temp.Model=="SVM + LSA",
-                            "Confidence"
-                        ].values[0],
-
-
-
-                        "NB + TF-IDF":
-                        df_temp.loc[
-                            df_temp.Model=="NB + TF-IDF",
-                            "Sentimen"
-                        ].values[0],
-
-
-                        "Conf NB + TF-IDF":
-                        df_temp.loc[
-                            df_temp.Model=="NB + TF-IDF",
-                            "Confidence"
-                        ].values[0],
-
-
-
-                        "NB + LSA":
-                        df_temp.loc[
-                            df_temp.Model=="NB + LSA",
-                            "Sentimen"
-                        ].values[0],
-
-
-                        "Conf NB + LSA":
-                        df_temp.loc[
-                            df_temp.Model=="NB + LSA",
-                            "Confidence"
-                        ].values[0],
-
-
-
-                        "Model Terbaik":
-                        terbaik["Model"],
-
-
-                        "Sentimen Terbaik":
-                        terbaik["Sentimen"],
-
-
-                        "Confidence Terbaik":
-                        terbaik["Confidence"]
-
-                    })
-
-
-
-                    progress.progress(
-                        (i+1)/jumlah_data
+                    hasil_baris[
+                        "Confidence"
+                    ] = (
+                        f"{model_terbaik[1]['Confidence']:.2f}%"
                     )
 
+                    hasil_semua.append(
+                        hasil_baris
+                    )
 
-
-                # =====================================
-                # HASIL
-                # =====================================
-
+                    progress.progress(
+                        (i + 1)
+                        /
+                        len(data)
+                    )
+                                    # ==========================================
+                # HASIL ANALISIS
+                # ==========================================
 
                 hasil_df = pd.DataFrame(
                     hasil_semua
                 )
-                # SIMPAN HASIL UNTUK MENU PERBANDINGAN
-                st.session_state["hasil_upload"] = hasil_df
-                st.session_state["data_uji"] = data_analisis
-
 
                 st.success(
                     "✅ Analisis selesai"
                 )
 
-
-
                 st.subheader(
-                    "Hasil Analisis Dataset"
+                    "📊 HASIL ANALISIS SENTIMEN"
                 )
-
-
 
                 st.dataframe(
                     hasil_df,
                     use_container_width=True,
-                    height=500
+                    height=600
                 )
 
+                # ==========================================
+                # DISTRIBUSI SENTIMEN
+                # ==========================================
 
+                st.subheader(
+                    "📈 DISTRIBUSI SENTIMEN TERBAIK"
+                )
 
+                if "Sentimen Terbaik" in hasil_df.columns:
 
+                    st.bar_chart(
+                        hasil_df[
+                            "Sentimen Terbaik"
+                        ].value_counts()
+                    )
 
-                # =====================================
+                # ==========================================
+                # RINGKASAN
+                # ==========================================
+
+                st.subheader(
+                    "📌 RINGKASAN ANALISIS"
+                )
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+
+                    st.metric(
+                        "Jumlah Data",
+                        len(hasil_df)
+                    )
+
+                with col2:
+
+                    if "Sentimen Terbaik" in hasil_df.columns:
+
+                        st.metric(
+                            "Sentimen Terbanyak",
+                            hasil_df[
+                                "Sentimen Terbaik"
+                            ]
+                            .value_counts()
+                            .idxmax()
+                        )
+
+                with col3:
+
+                    if "Confidence" in hasil_df.columns:
+
+                        rata_conf = (
+                            hasil_df["Confidence"]
+                            .str.replace("%", "")
+                            .astype(float)
+                            .mean()
+                        )
+
+                        st.metric(
+                            "Rata-rata Confidence",
+                            f"{rata_conf:.2f}%"
+                        )
+
+                # ==========================================
+                # SIMPAN SESSION
+                # ==========================================
+
+                st.session_state[
+                    "hasil_upload"
+                ] = hasil_df
+
+                st.session_state[
+                    "data_upload"
+                ] = data
+
+                # ==========================================
                 # DOWNLOAD CSV
-                # =====================================
+                # ==========================================
 
-
-                csv = hasil_df.to_csv(
-                    index=False
-                ).encode("utf-8")
-
-
+                csv = (
+                    hasil_df
+                    .to_csv(index=False)
+                    .encode("utf-8")
+                )
 
                 st.download_button(
 
-                    "⬇️ Download Hasil Analisis",
+                    label="⬇️ Download Hasil Analisis",
 
                     data=csv,
 
-                    file_name=
-                    "hasil_analisis_dataset.csv",
+                    file_name="hasil_analisis_sentimen.csv",
 
                     mime="text/csv",
 
@@ -1398,14 +1637,13 @@ elif page == "Upload Dataset":
 
                 )
 
-
-
         except Exception as e:
 
-
             st.error(
-                f"❌ Error : {str(e)}"
+                "❌ Terjadi kesalahan saat proses analisis"
             )
+
+            st.exception(e)
 
 # =====================================================
 # MENU RIWAYAT
@@ -1741,498 +1979,222 @@ elif page == "Riwayat":
 # MENU PERBANDINGAN MODEL
 # =====================================================
 
-# =====================================================
-# MENU PERBANDINGAN MODEL
-# =====================================================
-
 elif page == "Visualisasi Perbandingan Model":
-
 
     import pandas as pd
     import matplotlib.pyplot as plt
 
-    from sklearn.metrics import (
-        accuracy_score,
-        confusion_matrix,
-        classification_report
-    )
-
-
-    # =====================================================
-    # CSS
-    # =====================================================
-
     st.markdown("""
-    <style>
-
-    .history-header{
-        background:linear-gradient(
-            135deg,
-            #c96c6c,
-            #e89b9b
-        );
+    <div style="
+        background:linear-gradient(135deg,#c96c6c,#e89b9b);
         padding:30px;
         border-radius:20px;
         text-align:center;
-        margin-bottom:25px;
-        box-shadow:0 5px 20px rgba(0,0,0,0.08);
-    }
-
-    .history-title{
-        color:white;
-        font-size:36px;
-        font-weight:700;
-    }
-
-    .history-subtitle{
-        color:white;
-        font-size:16px;
-    }
-
-    .metric-box{
-        background:white;
-        padding:25px;
-        border-radius:20px;
-        text-align:center;
-        box-shadow:0 4px 15px rgba(0,0,0,0.08);
-    }
-
-    .metric-number{
-        font-size:34px;
-        font-weight:bold;
-        color:#c96c6c;
-    }
-
-    .metric-label{
-        color:#666;
-        font-size:15px;
-    }
-
-    .table-box{
-        background:white;
-        padding:20px;
-        border-radius:20px;
-        box-shadow:0 4px 15px rgba(0,0,0,0.08);
-        margin-top:20px;
-    }
-
-    .empty-box{
-        background:white;
-        padding:60px;
-        border-radius:20px;
-        text-align:center;
-        box-shadow:0 4px 15px rgba(0,0,0,0.08);
-    }
-
-    div.stDownloadButton > button,
-    div.stButton > button{
-
-        width:100%;
-        height:60px;
-
-        border:none;
-        border-radius:15px;
-
-        font-size:17px;
-        font-weight:bold;
-
-        transition:0.3s;
-
-        box-shadow:0 4px 15px rgba(0,0,0,0.08);
-    }
-
-    div.stDownloadButton > button{
-
-        background:linear-gradient(
-            135deg,
-            #36d1dc,
-            #5b86e5
-        );
-
-        color:white;
-    }
-
-    div.stButton > button{
-
-        background:linear-gradient(
-            135deg,
-            #ff6b6b,
-            #ee5253
-        );
-
-        color:white;
-    }
-
-    div.stDownloadButton > button:hover,
-    div.stButton > button:hover{
-
-        transform:translateY(-3px);
-    }
-
-    </style>
-    """, unsafe_allow_html=True)
-
-    # =====================================================
-    # HEADER
-    # =====================================================
-
-    st.markdown("""
-    <div class="history-header">
-        <div class="history-title">
-            VISUALISASI PERBANDINGAN MODEL
-        </div>
+    ">
+        <h1 style="color:white;">
+        VISUALISASI PERBANDINGAN MODEL
+        </h1>
     </div>
     """, unsafe_allow_html=True)
 
-
-
-    # ==========================
-    # CEK DATA
-    # ==========================
-
-
-    if (
-        "data_uji" not in st.session_state
-        or
-        "hasil_upload" not in st.session_state
-    ):
-
-        st.warning(
-            "⚠️ Silahkan lakukan analisis pada menu Upload Dataset terlebih dahulu"
-        )
-
-        st.stop()
-
-
-
-    data = st.session_state["data_uji"]
-
-
-
-    # ==========================
-    # LABEL
-    # ==========================
-
-
-    if "Label" in data.columns:
-
-        label_col = "Label"
-
-
-    elif "Sentimen Asli" in data.columns:
-
-        label_col = "Sentimen Asli"
-
-
-    else:
-
-        st.error(
-            "Kolom label tidak ditemukan"
-        )
-
-        st.stop()
-
-
-
-    X = data["Stemming"].astype(str)
-
-    y_true = data[label_col]
-
-
-
-    hasil_akurasi = {}
-
-    detail_model = {}
-
-
-
-    # ==========================
-    # PROSES MODEL
-    # ==========================
-
-
-    for nama_model, model in models.items():
-
-
-        y_pred = model.predict(
-            X
-        )
-
-
-        acc = accuracy_score(
-            y_true,
-            y_pred
-        )
-
-
-
-        hasil_akurasi[nama_model] = round(
-            acc*100,
-            2
-        )
-
-
-        detail_model[nama_model] = {
-
-            "prediksi": y_pred
-
-        }
-
-
-
-    # ==========================
-    # SUMMARY CARD
-    # ==========================
-
-
-    st.subheader(
-        "RINGKASAN PERFORMA MODEL"
-    )
-
-
-
-    cols = st.columns(4)
-
-
-    for i,(model, nilai) in enumerate(
-        hasil_akurasi.items()
-    ):
-
-
-        with cols[i]:
-
-
-            st.metric(
-                model,
-                f"{nilai}%"
-            )
-
-
-
-    # MODEL TERBAIK
-
-    terbaik = max(
-        hasil_akurasi,
-        key=hasil_akurasi.get
-    )
-
-
-    st.success(
-        f"🥇 Model terbaik : {terbaik} dengan akurasi {hasil_akurasi[terbaik]}%"
-    )
-
-
-
-    st.divider()
-
-
-
-    # ==========================
-    # DETAIL MODEL
-    # ==========================
-
-
-    for nama_model, model in models.items():
-
-
-        with st.expander(
-            f"🔍 Detail Evaluasi : {nama_model}",
-            expanded=True
-        ):
-
-
-
-            y_pred = detail_model[nama_model]["prediksi"]
-
-
-
-            col1,col2 = st.columns([1,2])
-
-
-
-            # ------------------
-            # ACCURACY
-            # ------------------
-
-            with col1:
-
-
-                st.markdown(
-                    "### ACCURACY"
-                )
-
-
-                st.metric(
-                    "Score",
-                    f"{hasil_akurasi[nama_model]}%"
-                )
-
-
-
-
-            # ------------------
-            # CONFUSION MATRIX
-            # ------------------
-
-            with col2:
-
-
-                st.markdown(
-                    "### CONFUSION MATRIX"
-                )
-
-
-                cm = confusion_matrix(
-                    y_true,
-                    y_pred
-                )
-
-
-                cm_df = pd.DataFrame(
-                    cm,
-                    index=sorted(
-                        y_true.unique()
-                    ),
-                    columns=sorted(
-                        y_true.unique()
-                    )
-                )
-
-
-                st.dataframe(
-                    cm_df,
-                    use_container_width=True
-                )
-
-
-
-
-            # ------------------
-            # CLASSIFICATION REPORT
-            # ------------------
-
-
-            st.markdown(
-                "### CLASSIFICATION REPORT"
-            )
-
-
-            report = classification_report(
-                y_true,
-                y_pred,
-                output_dict=True
-            )
-
-
-
-            report_df = pd.DataFrame(
-                report
-            ).transpose()
-
-
-
-            st.dataframe(
-                report_df.style
-                .format("{:.3f}")
-                .set_properties(
-                    **{
-                    "text-align":"center"
-                    }
-                ),
-                use_container_width=True
-            )
-
-
-
-
-    # ==========================
-    # GRAFIK
-    # ==========================
-
-
-    st.divider()
-
-
-
-    st.subheader(
-        "GRAFIK PERBANDINGAN"
-    )
-
-
-
-    grafik = pd.DataFrame({
-
-        "Model":
-        list(hasil_akurasi.keys()),
-
-
-        "Akurasi":
-        list(hasil_akurasi.values())
+    # =====================================================
+    # HASIL DARI GOOGLE COLAB
+    # =====================================================
+
+    hasil = pd.DataFrame({
+
+        "Model":[
+            "SVM + TF-IDF",
+            "SVM + LSA",
+            "NB + TF-IDF",
+            "NB + LSA"
+        ],
+
+        "Accuracy":[
+            0.8896,
+            0.8094,
+            0.7759,
+            0.7793
+        ],
+
+        "Precision":[
+            0.8882,
+            0.7941,
+            0.7756,
+            0.7447
+        ],
+
+        "Recall":[
+            0.8896,
+            0.8094,
+            0.7759,
+            0.7793
+        ],
+
+        "F1-Score":[
+            0.8875,
+            0.7832,
+            0.7470,
+            0.7427
+        ]
 
     })
 
+    # =====================================================
+    # CARD
+    # =====================================================
 
+    st.subheader("Ringkasan Performa Model")
 
-    fig,ax = plt.subplots(
-        figsize=(9,5)
+    cols = st.columns(4)
+
+    for i in range(len(hasil)):
+
+        with cols[i]:
+
+            st.metric(
+                hasil.loc[i,"Model"],
+                f"{hasil.loc[i,'Accuracy']*100:.2f}%"
+            )
+
+    # =====================================================
+    # MODEL TERBAIK
+    # =====================================================
+
+    terbaik = hasil.loc[
+        hasil["Accuracy"].idxmax()
+    ]
+
+    st.success(
+        f"🏆 Model Terbaik : {terbaik['Model']} "
+        f"dengan Accuracy {terbaik['Accuracy']*100:.2f}%"
     )
 
+    st.divider()
+
+    # =====================================================
+    # TABEL
+    # =====================================================
+
+    st.subheader("Tabel Hasil Evaluasi Model")
+
+    tampil = hasil.copy()
+
+    for kolom in [
+        "Accuracy",
+        "Precision",
+        "Recall",
+        "F1-Score"
+    ]:
+
+        tampil[kolom] = (
+            tampil[kolom] * 100
+        ).round(2)
+
+    st.dataframe(
+        tampil,
+        use_container_width=True,
+        hide_index=True
+    )
+
+    st.divider()
+
+    # =====================================================
+    # GRAFIK ACCURACY
+    # =====================================================
+
+    st.subheader("Grafik Accuracy")
+
+    fig, ax = plt.subplots(figsize=(8,5))
 
     ax.bar(
-        grafik["Model"],
-        grafik["Akurasi"]
+        hasil["Model"],
+        hasil["Accuracy"]*100
     )
 
+    ax.set_ylim(0,100)
+    ax.set_ylabel("Accuracy (%)")
+    ax.set_title("Perbandingan Accuracy")
 
-
-    ax.set_ylim(
-        0,
-        100
-    )
-
-
-    ax.set_ylabel(
-        "Akurasi (%)"
-    )
-
-
-    ax.set_title(
-        "Perbandingan Akurasi 4 Model"
-    )
-
-
-    plt.xticks(
-        rotation=25
-    )
-
-
-
-    for i,v in enumerate(
-        grafik["Akurasi"]
-    ):
+    for i,v in enumerate(hasil["Accuracy"]*100):
 
         ax.text(
             i,
             v+1,
-            f"{v}%",
-            ha="center"
+            f"{v:.2f}%",
+            ha="center",
+            fontsize=10
         )
 
+    plt.xticks(rotation=15)
 
     st.pyplot(fig)
+
+    # =====================================================
+    # GRAFIK SEMUA METRIK
+    # =====================================================
+
+    st.subheader("Perbandingan Accuracy, Precision, Recall, dan F1-Score")
+
+    fig, ax = plt.subplots(figsize=(10,5))
+
+    x = range(len(hasil))
+
+    width = 0.2
+
+    ax.bar(
+        [i-0.3 for i in x],
+        hasil["Accuracy"]*100,
+        width,
+        label="Accuracy"
+    )
+
+    ax.bar(
+        [i-0.1 for i in x],
+        hasil["Precision"]*100,
+        width,
+        label="Precision"
+    )
+
+    ax.bar(
+        [i+0.1 for i in x],
+        hasil["Recall"]*100,
+        width,
+        label="Recall"
+    )
+
+    ax.bar(
+        [i+0.3 for i in x],
+        hasil["F1-Score"]*100,
+        width,
+        label="F1-Score"
+    )
+
+    ax.set_xticks(x)
+
+    ax.set_xticklabels(
+        hasil["Model"],
+        rotation=15
+    )
+
+    ax.set_ylim(0,100)
+
+    ax.set_ylabel("Persentase (%)")
+
+    ax.set_title("Perbandingan Kinerja Model")
+
+    ax.legend()
+
+    st.pyplot(fig)
+# =====================================================
+# MENU PREPROCESSING
+# =====================================================
+
 elif page == "Preprocessing":
 
+    import streamlit as st
     import pandas as pd
-    import re
-    import nltk
-
-    from nltk.corpus import stopwords
-    from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
-
-    try:
-        nltk.data.find('corpora/stopwords')
-    except:
-        nltk.download('stopwords')
+    import os
 
     st.markdown("""
     <div style="
@@ -2241,383 +2203,125 @@ elif page == "Preprocessing":
         border-radius:20px;
         text-align:center;
     ">
-    <h1 style="color:white">
-    PREPROCESSING DAN PELABELAN DATA
-    </h1>
+        <h1 style="color:white">
+            PREPROCESSING DAN PELABELAN DATA
+        </h1>
     </div>
     """, unsafe_allow_html=True)
 
-    uploaded_file = st.file_uploader(
-        "Upload Dataset CSV",
-        type=["csv"]
-    )
+    # ==================================================
+    # LOKASI FILE CSV
+    # ==================================================
 
-    if uploaded_file is not None:
+    file_preprocessing = "DATASETMOBILJKNSUDAHPREPROCESSINGDAN PELABELAN.csv"
 
-        # =========================
-        # LOAD DATA
-        # =========================
+    # ==================================================
+    # CEK FILE
+    # ==================================================
 
-        review = pd.read_csv(
-            uploaded_file,
-            sep=",",
-            engine="python",
-            on_bad_lines="skip"
+    if not os.path.exists(file_preprocessing):
+
+        st.error(
+            f"File '{file_preprocessing}' tidak ditemukan."
         )
 
-        review.columns = (
-            review.columns
-            .str.strip()
-            .str.replace(";", "", regex=False)
-        )
+    else:
 
-        st.subheader("📄 Dataset Awal")
+        try:
 
-        st.dataframe(
-            review.head(),
-            use_container_width=True
-        )
+            # ==========================================
+            # MENCOBA MEMBACA OTOMATIS
+            # ==========================================
 
-        if "content" not in review.columns:
+            try:
 
-            st.error(
-                "Kolom 'content' tidak ditemukan"
+                review = pd.read_csv(
+                    file_preprocessing,
+                    sep=None,
+                    engine="python"
+                )
+
+            except:
+
+                try:
+
+                    review = pd.read_csv(
+                        file_preprocessing,
+                        sep=";",
+                        engine="python"
+                    )
+
+                except:
+
+                    review = pd.read_csv(
+                        file_preprocessing,
+                        sep=",",
+                        engine="python"
+                    )
+
+            # ==========================================
+            # BERSIHKAN NAMA KOLOM
+            # ==========================================
+
+            review.columns = (
+                review.columns
+                .str.strip()
+                .str.replace(";", "", regex=False)
             )
 
-        else:
+            
 
-            with st.spinner(
-                "Melakukan preprocessing..."
-            ):
 
-                # =========================
-                # HAPUS DATA KOSONG
-                # =========================
+            # ==========================================
+            # TAMPILKAN DATA
+            # ==========================================
 
-                review = review.dropna(
-                    subset=["content"]
-                )
-
-                review = review[
-                    review["content"]
-                    .astype(str)
-                    .str.strip() != ""
-                ]
-
-                # =========================
-                # CASE FOLDING
-                # =========================
-
-                def casefoldingText(text):
-
-                    if isinstance(text, str):
-                        return text.lower()
-
-                    return ""
-
-                review["CaseFolding"] = (
-                    review["content"]
-                    .apply(casefoldingText)
-                )
-
-                # =========================
-                # CLEANING
-                # =========================
-
-                def cleaningulasan(text):
-
-                    text = re.sub(
-                        r'@[A-Za-z0-9_]+',
-                        ' ',
-                        str(text)
-                    )
-
-                    text = re.sub(
-                        r'#[A-Za-z0-9_]+',
-                        ' ',
-                        text
-                    )
-
-                    text = re.sub(
-                        r'http\S+',
-                        ' ',
-                        text
-                    )
-
-                    text = re.sub(
-                        r'[0-9]+',
-                        ' ',
-                        text
-                    )
-
-                    text = re.sub(
-                        r'[-()"#/@;:<>{}+=~|.!?,_]',
-                        ' ',
-                        text
-                    )
-
-                    text = re.sub(
-                        r'\s+',
-                        ' ',
-                        text
-                    )
-
-                    return text.strip()
-
-                def clearEmoji(text):
-
-                    return (
-                        text
-                        .encode(
-                            "ascii",
-                            "ignore"
-                        )
-                        .decode("ascii")
-                    )
-
-                def replaceTOM(text):
-
-                    pola = re.compile(
-                        r'(.)\1{2,}',
-                        re.DOTALL
-                    )
-
-                    return pola.sub(
-                        r'\1',
-                        text
-                    )
-
-                review["Cleaning"] = (
-                    review["CaseFolding"]
-                    .apply(cleaningulasan)
-                    .apply(clearEmoji)
-                    .apply(replaceTOM)
-                )
-
-                review = review[
-                    review["Cleaning"]
-                    .str.strip() != ""
-                ]
-
-                # =========================
-                # TOKENIZING
-                # =========================
-
-                def tokenizingText(text):
-
-                    return str(text).split()
-
-                review["Tokenizing"] = (
-                    review["Cleaning"]
-                    .apply(tokenizingText)
-                )
-
-                # =========================
-                # FORMALISASI
-                # =========================
-
-                kamusSlang = {
-
-                    "yg":"yang",
-                    "gak":"tidak",
-                    "gk":"tidak",
-                    "ga":"tidak",
-                    "bgt":"banget",
-                    "aja":"saja",
-                    "udh":"sudah",
-                    "udah":"sudah",
-                    "tdk":"tidak",
-                    "krn":"karena",
-                    "sm":"sama",
-                    "utk":"untuk",
-                    "dr":"dari",
-                    "jg":"juga",
-                    "jd":"jadi",
-                    "tp":"tapi",
-                    "klo":"kalau",
-                    "blm":"belum",
-                    "apk":"aplikasi",
-                    "app":"aplikasi"
-
-                }
-
-                def formal_text(words):
-
-                    return [
-                        kamusSlang.get(
-                            word,
-                            word
-                        )
-                        for word in words
-                    ]
-
-                review["Formalisasi"] = (
-                    review["Tokenizing"]
-                    .apply(formal_text)
-                )
-
-                # =========================
-                # STOPWORD
-                # =========================
-
-                stopword = set(
-                    stopwords.words(
-                        "indonesian"
-                    )
-                )
-
-                stopword.update([
-                    "yg",
-                    "dg",
-                    "rt",
-                    "aja",
-                    "nih",
-                    "sih"
-                ])
-
-                def stopwordText(words):
-
-                    return [
-                        word
-                        for word in words
-                        if word not in stopword
-                    ]
-
-                review["WithoutStopwords"] = (
-                    review["Formalisasi"]
-                    .apply(stopwordText)
-                )
-
-                # =========================
-                # STEMMING
-                # =========================
-
-                factory = StemmerFactory()
-
-                stemmer = (
-                    factory.create_stemmer()
-                )
-
-                def stemmingText(words):
-
-                    text = " ".join(words)
-
-                    return stemmer.stem(text)
-
-                review["Stemming"] = (
-                    review["WithoutStopwords"]
-                    .apply(stemmingText)
-                )
-
-                # =========================
-                # LABELING
-                # =========================
-
-                positif = [
-                    "bagus",
-                    "baik",
-                    "cepat",
-                    "mudah",
-                    "mantap",
-                    "bantu",
-                    "puas",
-                    "praktis",
-                    "lancar",
-                    "aman",
-                    "nyaman"
-                ]
-
-                negatif = [
-                    "buruk",
-                    "error",
-                    "gagal",
-                    "lambat",
-                    "lemot",
-                    "susah",
-                    "ribet",
-                    "kecewa",
-                    "masalah",
-                    "kendala",
-                    "rusak"
-                ]
-
-                def labeling(text):
-
-                    text = str(text)
-
-                    skor = 0
-
-                    for kata in positif:
-
-                        if kata in text:
-                            skor += 1
-
-                    for kata in negatif:
-
-                        if kata in text:
-                            skor -= 1
-
-                    if skor > 0:
-                        return "Positif"
-
-                    elif skor < 0:
-                        return "Negatif"
-
-                    else:
-                        return "Netral"
-
-                review["Label"] = (
-                    review["Stemming"]
-                    .apply(labeling)
-                )
-
-            st.success(
-                "✅ Preprocessing selesai"
-            )
-
-            st.subheader(
-                "📊 Hasil Preprocessing"
-            )
+            
 
             st.dataframe(
-                review[
-                    [
-                        "content",
-                        "CaseFolding",
-                        "Cleaning",
-                        "Tokenizing",
-                        "Formalisasi",
-                        "WithoutStopwords",
-                        "Stemming",
-                        "Label"
-                    ]
-                ],
-                use_container_width=True
+                review,
+                use_container_width=True,
+                height=500
             )
 
-            st.subheader(
-                "📈 Distribusi Sentimen"
-            )
+            # ==========================================
+            # DISTRIBUSI LABEL
+            # ==========================================
 
-            st.bar_chart(
-                review["Label"]
-                .value_counts()
-            )
+            if "Label" in review.columns:
 
-            # =========================
-            # DOWNLOAD CSV
-            # =========================
+                st.subheader("📈 Distribusi Sentimen")
+
+                st.bar_chart(
+                    review["Label"].value_counts()
+                )
+
+            else:
+
+                st.warning(
+                    "Kolom Label tidak ditemukan."
+                )
+
+            # ==========================================
+            # DOWNLOAD
+            # ==========================================
 
             csv = review.to_csv(
                 index=False
             ).encode("utf-8")
 
             st.download_button(
-                label="📥 Download Hasil Preprocessing",
+                label="📥 Download Dataset Preprocessing",
                 data=csv,
-                file_name="hasil_preprocessing_mobile_jkn.csv",
+                file_name="DATASETMOBILJKNSUDAHPREPROCESSINGDAN_PELABELAN.csv",
                 mime="text/csv",
                 use_container_width=True
+            )
+
+        except Exception as e:
+
+            st.error(
+                f"Gagal membaca file CSV.\n\n{e}"
             )
     
 
