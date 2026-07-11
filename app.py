@@ -1689,20 +1689,36 @@ elif page == "Upload File CSV":
     # HEADER
     # ==========================================
 
+    
     st.markdown("""
-    <div style="
-        background:linear-gradient(90deg,#11998e,#38ef7d);
-        padding:25px;
-        border-radius:15px;
+    <style>
+
+    .form-container{
+        background:white;
+        padding:35px;
+        border-radius:20px;
+        box-shadow:0px 4px 20px rgba(0,0,0,0.08);
+        margin-top:20px;
+    }
+
+    .form-title{
+        font-size:32px;
+        font-weight:bold;
+        color:#c96c6c;
+        margin-bottom:25px;
         text-align:center;
-        color:white;
-    ">
-        <h2>UPLOAD FILE CSV</h2>
-        <p>Analisis Sentimen Menggunakan 4 Model Machine Learning</p>
-    </div>
+    }
+
+    </style>
     """, unsafe_allow_html=True)
 
-    st.write("")
+    st.markdown("""
+    <div class="form-container">
+        <div class="form-title">
+            <h2>UPLOAD FILE CSV</h2>
+        <p>Analisis Sentimen Menggunakan 4 Model Machine Learning</p>
+        </div>
+    """, unsafe_allow_html=True)
 
     # ==========================================
     # MENU
