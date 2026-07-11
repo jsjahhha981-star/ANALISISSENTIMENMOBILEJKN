@@ -1084,6 +1084,31 @@ elif page == "Upload Dataset":
             INPUT DATA UNTUK ANALISIS SENTIMEN
         </div>
     """, unsafe_allow_html=True)
+    # =====================================
+    # BUTTON
+    # =====================================
+
+    tombol1, tombol2 = st.columns(2)
+
+    with tombol1:
+        upload_btn = st.button(
+            "📂 Input Manual",
+            use_container_width=True
+        )
+
+        if upload_btn:
+            st.session_state.page = "Upload Dataset"
+            st.rerun()
+
+    with tombol2:
+        upload_btn = st.button(
+            "📂 Upload File CSV",
+            use_container_width=True
+        )
+
+        if upload_btn:
+            st.session_state.page = "Upload File CSV"
+            st.rerun()
 
     df_template = pd.DataFrame({
         "userName": [""],
@@ -1195,7 +1220,7 @@ elif page == "Upload Dataset":
 
             data["Tokenizing"] = (
                 data["Cleaning"]
-                .apply(lambda x: str(x).split())
+                .apply(word_tokenize)
             )
 
             # ==========================================
@@ -1644,7 +1669,821 @@ elif page == "Upload Dataset":
             )
 
             st.exception(e)
+elif page == "Upload File CSV":
 
+    import pandas as pd
+    import numpy as np
+    import re
+    import csv
+    import nltk
+    import streamlit as st
+
+    from nltk.tokenize import word_tokenize
+    from nltk.corpus import stopwords
+    from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+
+    nltk.download("punkt", quiet=True)
+    nltk.download("stopwords", quiet=True)
+
+    # ==========================================
+    # HEADER
+    # ==========================================
+
+    st.markdown("""
+    <div style="
+        background:linear-gradient(90deg,#11998e,#38ef7d);
+        padding:25px;
+        border-radius:15px;
+        text-align:center;
+        color:white;
+    ">
+        <h2>UPLOAD FILE CSV</h2>
+        <p>Analisis Sentimen Menggunakan 4 Model Machine Learning</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.write("")
+
+    # ==========================================
+    # MENU
+    # ==========================================
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+
+        if st.button(
+            "📂 Input Manual",
+            use_container_width=True
+        ):
+
+            st.session_state.page = "Upload Dataset"
+
+            st.rerun()
+
+    with col2:
+
+        st.button(
+
+            "📂 Upload File CSV",
+
+            disabled=True,
+
+            use_container_width=True
+
+        )
+
+    st.divider()
+
+    # ==========================================
+    # FILE UPLOADER
+    # ==========================================
+
+    file = st.file_uploader(
+
+        "Pilih File CSV",
+
+        type=["csv"]
+
+    )
+
+    # ==========================================
+    # JIKA FILE DIPILIH
+    # ==========================================
+
+    if file is not None:
+
+        try:
+
+            # ====================================================
+            # MEMBACA CSV
+            # ====================================================
+
+            file.seek(0)
+
+            data = pd.read_csv(
+
+                file,
+
+                engine="python",
+
+                sep=",",
+
+                quoting=csv.QUOTE_MINIMAL,
+
+                on_bad_lines="skip"
+
+            )
+
+            # ====================================================
+            # BERSIHKAN HEADER
+            # ====================================================
+
+            data.columns = (
+
+                data.columns
+
+                .astype(str)
+
+                .str.strip()
+
+                .str.replace('"', "", regex=False)
+
+                .str.replace(";", "", regex=False)
+
+            )
+
+            # ====================================================
+            # JIKA HEADER MASIH SATU KOLOM
+            # ====================================================
+
+            if len(data.columns) == 1:
+
+                file.seek(0)
+
+                text = file.read().decode(
+
+                    "utf-8",
+
+                    errors="ignore"
+
+                )
+
+                from io import StringIO
+
+                data = pd.read_csv(
+
+                    StringIO(text),
+
+                    sep=",",
+
+                    engine="python",
+
+                    on_bad_lines="skip"
+
+                )
+
+                data.columns = (
+
+                    data.columns
+
+                    .astype(str)
+
+                    .str.strip()
+
+                    .str.replace('"', "", regex=False)
+
+                    .str.replace(";", "", regex=False)
+
+                )
+
+            # ====================================================
+            # CEK KOLOM
+            # ====================================================
+
+            if "userName" not in data.columns:
+
+                st.error("Kolom userName tidak ditemukan.")
+
+                st.write(data.columns.tolist())
+
+                st.stop()
+
+            if "content" not in data.columns:
+
+                st.error("Kolom content tidak ditemukan.")
+
+                st.write(data.columns.tolist())
+
+                st.stop()
+
+            # ====================================================
+            # HAPUS BARIS KOSONG
+            # ====================================================
+
+            data = data.dropna(subset=["content"])
+
+            data["content"] = data["content"].astype(str)
+
+            data["userName"] = data["userName"].astype(str)
+
+            # ====================================================
+            # PREVIEW
+            # ====================================================
+
+            st.subheader("Preview Dataset")
+
+            st.dataframe(
+
+                data[
+                    [
+                        "userName",
+                        "content"
+                    ]
+                ],
+
+                use_container_width=True,
+
+                hide_index=True
+
+            )
+
+            st.success(
+
+                f"Jumlah data : {len(data)}"
+
+            )
+
+            jumlah = st.number_input(
+
+                "Jumlah data yang diproses",
+
+                min_value=1,
+
+                max_value=len(data),
+
+                value=len(data),
+
+                step=1
+
+            )
+
+            data = data.head(jumlah)
+
+            st.info(
+
+                f"Data diproses : {len(data)}"
+
+            )
+
+            proses = st.button(
+
+                "🚀 Mulai Analisis",
+
+                use_container_width=True
+
+            )
+            if proses:
+                with st.spinner(
+                    "Melakukan preprocessing..."
+                    ):
+                    data["CaseFolding"] = (
+                    data["content"]
+                    .astype(str)
+
+                    .str.lower()
+
+                    .str.strip()
+
+                )
+
+                # ==========================================
+                # CLEANING
+                # ==========================================
+
+                def clean_text(text):
+
+                    text = str(text)
+
+                    text = re.sub(
+                        r"http\S+|www\S+",
+                        "",
+                        text
+                    )
+
+                    text = re.sub(
+                        r"@\w+",
+                        "",
+                        text
+                    )
+
+                    text = re.sub(
+                        r"#\w+",
+                        "",
+                        text
+                    )
+
+                    text = re.sub(
+                        r"\d+",
+                        "",
+                        text
+                    )
+
+                    text = re.sub(
+                        r"[^\w\s]",
+                        "",
+                        text
+                    )
+
+                    text = re.sub(
+                        r"\s+",
+                        " ",
+                        text
+                    )
+
+                    return text.strip()
+
+                data["Cleaning"] = (
+
+                    data["CaseFolding"]
+
+                    .apply(clean_text)
+
+                )
+
+                # ==========================================
+                # TOKENIZING
+                # ==========================================
+
+                def tokenize_text(text):
+
+                    try:
+
+                        return word_tokenize(str(text))
+
+                    except:
+
+                        return str(text).split()
+
+                data["Tokenizing"] = (
+
+                    data["Cleaning"]
+
+                    .apply(tokenize_text)
+
+                )
+
+                # ==========================================
+                # STOPWORD REMOVAL
+                # ==========================================
+
+                stop_words = set(
+                    stopwords.words("indonesian")
+                )
+
+                stop_words.update([
+
+                    "yg",
+                    "dg",
+                    "aja",
+                    "nih",
+                    "nya",
+                    "sih",
+                    "dong",
+                    "kok",
+                    "lah",
+                    "ya"
+
+                ])
+
+                data["WithoutStopwords"] = (
+
+                    data["Tokenizing"]
+
+                    .apply(
+
+                        lambda x: [
+
+                            word
+
+                            for word in x
+
+                            if word not in stop_words
+
+                        ]
+
+                    )
+
+                )
+
+                # ==========================================
+                # NORMALIZATION
+                # ==========================================
+
+                norm_dict = {
+
+                    "gk":"tidak",
+                    "ga":"tidak",
+                    "gak":"tidak",
+                    "ngga":"tidak",
+                    "nggak":"tidak",
+                    "tdk":"tidak",
+                    "bgt":"banget",
+                    "apk":"aplikasi",
+                    "app":"aplikasi",
+                    "krn":"karena",
+                    "utk":"untuk",
+                    "dr":"dari",
+                    "udh":"sudah",
+                    "sdh":"sudah",
+                    "blm":"belum",
+                    "jg":"juga",
+                    "dgn":"dengan",
+                    "trs":"terus",
+                    "sm":"sama"
+
+                }
+
+                data["Normalized"] = (
+
+                    data["WithoutStopwords"]
+
+                    .apply(
+
+                        lambda x:
+
+                        " ".join(
+
+                            [
+
+                                norm_dict.get(
+
+                                    word,
+
+                                    word
+
+                                )
+
+                                for word in x
+
+                            ]
+
+                        )
+
+                    )
+
+                )
+
+                # ==========================================
+                # STEMMING
+                # ==========================================
+
+                factory = StemmerFactory()
+
+                stemmer = factory.create_stemmer()
+
+                data["Stemming"] = (
+
+                    data["Normalized"]
+
+                    .apply(
+
+                        lambda x:
+
+                        stemmer.stem(
+
+                            str(x)
+
+                        )
+
+                    )
+
+                )
+
+                # ==========================================
+                # LEXICON SENTIMENT
+                # ==========================================
+
+                positif = [
+
+                    "bagus",
+                    "baik",
+                    "cepat",
+                    "mudah",
+                    "mantap",
+                    "puas",
+                    "nyaman",
+                    "lengkap",
+                    "bantu",
+                    "aman",
+                    "praktis",
+                    "keren",
+                    "hebat",
+                    "suka"
+
+                ]
+
+                negatif = [
+
+                    "buruk",
+                    "jelek",
+                    "gagal",
+                    "error",
+                    "lemot",
+                    "lambat",
+                    "bug",
+                    "kecewa",
+                    "parah",
+                    "rusak",
+                    "susah",
+                    "ribet"
+
+                ]
+
+                def lexicon_sentiment(text):
+
+                    score = 0
+
+                    for word in str(text).split():
+
+                        if word in positif:
+
+                            score += 1
+
+                        elif word in negatif:
+
+                            score -= 1
+
+                    if score > 0:
+
+                        return score, "Positif"
+
+                    elif score < 0:
+
+                        return score, "Negatif"
+
+                    else:
+
+                        return score, "Netral"
+
+                hasil = (
+
+                    data["Stemming"]
+
+                    .apply(
+
+                        lexicon_sentiment
+
+                    )
+
+                )
+
+                data["Score"] = (
+
+                    hasil.apply(
+
+                        lambda x: x[0]
+
+                    )
+
+                )
+
+                data["Lexicon"] = (
+
+                    hasil.apply(
+
+                        lambda x: x[1]
+
+                    )
+
+                )
+
+                # ==========================================
+                # TAMPILKAN PREPROCESSING
+                # ==========================================
+
+                st.subheader(
+                    "Hasil Preprocessing"
+                )
+
+                st.dataframe(
+
+                    data[
+                        [
+
+                            "userName",
+
+                            "content",
+
+                            "CaseFolding",
+
+                            "Cleaning",
+
+                            "Tokenizing",
+
+                            "WithoutStopwords",
+
+                            "Normalized",
+
+                            "Stemming",
+
+                            "Score",
+
+                            "Lexicon"
+
+                        ]
+
+                    ],
+
+                    use_container_width=True,
+
+                    hide_index=True
+
+                )
+
+                st.divider()
+
+                progress = st.progress(0)
+
+                hasil_semua = []
+                                # ==========================================
+                # PREDIKSI SEMUA MODEL
+                # ==========================================
+
+                hasil_semua = []
+
+                total = len(data)
+
+                for i, row in data.iterrows():
+
+                    text = row["Stemming"]
+
+                    hasil = {
+
+                        "userName": row["userName"],
+
+                        "content": row["content"],
+
+                        "CaseFolding": row["CaseFolding"],
+
+                        "Cleaning": row["Cleaning"],
+
+                        "Tokenizing": " ".join(row["Tokenizing"]),
+
+                        "WithoutStopwords": " ".join(row["WithoutStopwords"]),
+
+                        "Normalized": row["Normalized"],
+
+                        "Stemming": row["Stemming"],
+
+                        "Score": row["Score"],
+
+                        "Lexicon": row["Lexicon"]
+
+                    }
+
+                    confidence_semua = {}
+
+                    # ==========================================
+                    # LOOP SEMUA MODEL
+                    # ==========================================
+
+                    for nama_model, model in models.items():
+
+                        prediksi = model.predict([text])[0]
+
+                        hasil[nama_model] = prediksi
+
+                        # ======================================
+                        # CONFIDENCE
+                        # ======================================
+
+                        if hasattr(model, "decision_function"):
+
+                            score = model.decision_function([text])
+
+                            if np.ndim(score) == 1:
+
+                                conf = (
+                                    abs(score[0])
+                                    /
+                                    (abs(score[0]) + 1)
+                                ) * 100
+
+                            else:
+
+                                conf = (
+                                    np.max(np.abs(score))
+                                    /
+                                    (np.max(np.abs(score)) + 1)
+                                ) * 100
+
+                        elif hasattr(model, "predict_proba"):
+
+                            proba = model.predict_proba([text])
+
+                            conf = np.max(proba) * 100
+
+                        else:
+
+                            conf = 0
+
+                        hasil[f"Conf {nama_model}"] = f"{conf:.2f}%"
+
+                        confidence_semua[nama_model] = conf
+
+                    # ==========================================
+                    # MODEL TERBAIK
+                    # ==========================================
+
+                    model_terbaik = max(
+
+                        confidence_semua,
+
+                        key=confidence_semua.get
+
+                    )
+
+                    hasil["Model Terbaik"] = model_terbaik
+
+                    hasil["Sentimen Terbaik"] = hasil[model_terbaik]
+
+                    hasil["Confidence"] = (
+
+                        f"{confidence_semua[model_terbaik]:.2f}%"
+
+                    )
+
+                    hasil_semua.append(hasil)
+
+                    progress.progress(
+
+                        (i + 1) / total
+
+                    )
+                                    # ==========================================
+                # HASIL ANALISIS
+                # ==========================================
+
+                hasil_df = pd.DataFrame(hasil_semua)
+
+                st.success("✅ Analisis Sentimen Berhasil")
+
+                st.subheader("📊 Hasil Analisis Sentimen")
+
+                st.dataframe(
+                    hasil_df,
+                    use_container_width=True,
+                    hide_index=True
+                )
+
+                st.divider()
+
+                # ==========================================
+                # METRIK
+                # ==========================================
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+
+                    st.metric(
+                        "Jumlah Data",
+                        len(hasil_df)
+                    )
+
+                with col2:
+
+                    if "Sentimen Terbaik" in hasil_df.columns:
+
+                        st.metric(
+
+                            "Sentimen Terbanyak",
+
+                            hasil_df[
+                                "Sentimen Terbaik"
+                            ]
+                            .value_counts()
+                            .idxmax()
+
+                        )
+
+                with col3:
+
+                    if "Confidence" in hasil_df.columns:
+
+                        rata = (
+
+                            hasil_df["Confidence"]
+
+                            .str.replace("%", "", regex=False)
+
+                            .astype(float)
+
+                            .mean()
+
+                        )
+
+                        st.metric(
+
+                            "Rata-rata Confidence",
+
+                            f"{rata:.2f}%"
+
+                        )
+
+                st.divider()
+
+                
+
+        except Exception as e:
+
+            st.error(
+                "❌ Terjadi kesalahan saat proses analisis."
+            )
+
+            st.exception(e)
+                    
 # =====================================================
 # MENU RIWAYAT
 # =====================================================
