@@ -500,16 +500,13 @@ with st.sidebar:
 
     if st.button("Prediksi", use_container_width=True):
         st.session_state.page = "Prediksi"
+    if st.button("Preprocessing", use_container_width=True):
+        st.session_state.page = "Preprocessing"
 
     if st.button("Riwayat", use_container_width=True):
         st.session_state.page = "Riwayat"
     if st.button("Visualisasi Perbandingan Model", use_container_width=True):
         st.session_state.page = "Visualisasi Perbandingan Model"
-
-    st.divider()
-
-    if st.button("Preprocessing", use_container_width=True):
-        st.session_state.page = "Preprocessing"
 
     st.divider()
 
